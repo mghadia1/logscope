@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+*.egg-info/
+.DS_Store
+# The UI's dependencies and build output.
+ui/node_modules/
+ui/dist/
+# Local data when the API runs outside Docker.
+var/

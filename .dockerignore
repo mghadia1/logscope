@@ -1,0 +1,15 @@
+.venv
+.git
+.github
+**/__pycache__
+.pytest_cache
+.mypy_cache
+.ruff_cache
+build
+*.egg-info
+tests
+ui/node_modules
+ui/dist
+var
+scripts
+.DS_Store

@@ -1,0 +1,12 @@
+services:
+  logscope:
+    build: .
+    ports:
+      # 8200 on the host: SurgiServe uses 8000 and Gatekeeper 8080.
+      - "8200:8000"
+    volumes:
+      - logscope-data:/data
+    restart: unless-stopped
+
+volumes:
+  logscope-data:

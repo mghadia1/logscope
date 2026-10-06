@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "logscope"
+version = "0.1.0"
+description = "A log search engine built from the storage up: write-ahead log, segments, inverted index, query language"
+requires-python = ">=3.14"
+license = "MIT"
+dependencies = [
+  "fastapi>=0.142",
+  "pydantic-settings>=2.15",
+  "uvicorn>=0.54",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx2>=2.13",
+  "mypy>=2.4",
+  "pytest>=9.1",
+  "ruff>=0.16",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+# Test the working tree, not whatever copy happens to be installed in the venv.
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+extend-exclude = ["ui"]
+
+[tool.ruff.lint]
+# E/F: pycodestyle and pyflakes. I: import order. B: likely bugs.
+# UP: modern syntax for the target version.
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.mypy]
+strict = true
+files = ["src", "tests"]
