@@ -9,11 +9,12 @@ logs of two earlier projects, SurgiServe and Gatekeeper.
 It deliberately does not use Elasticsearch, OpenSearch, Loki, ClickHouse or
 SQLite's full-text search: the point is to build the parts they provide.
 
-> **Status:** Milestones 0-4 of 7. Events can be ingested, survive crashes,
+> **Status:** Milestones 0-5 of 7. Events can be ingested, survive crashes,
 > and be searched with a small query language through an inverted index;
-> counted over time, by value and as numbers; and followed live. Old data
-> expires and small segments are merged. The UI is still a shell
-> (Milestone 5), and nothing has been measured yet (Milestone 6).
+> counted over time, by value and as numbers; and followed live, from an API
+> and a browser UI. Old data expires and small segments are merged. Nothing
+> has been measured yet (Milestone 6), and the only data it has seen is
+> synthetic.
 
 ## Status
 
@@ -24,7 +25,7 @@ SQLite's full-text search: the point is to build the parts they provide.
 | 2 | Inverted index per segment; segment time bounds to skip segments; indexed results checked against the scan | Done |
 | 3 | Query language (`level:error service:gatekeeper status>=500 "upstream timeout" NOT route:/healthz`), positioned errors; property test: index equals scan | Done |
 | 4 | Aggregations, live tail over Server-Sent Events, retention, merging small segments | Done |
-| 5 | React UI: query box, results, histogram, field sidebar, live tail | Not started |
+| 5 | React UI: query box, results, histogram, field sidebar, live tail | Done |
 | 6 | Real logs (SurgiServe, Gatekeeper) through a shipper; measured ingest rate and query latency, index vs scan | Not started |
 | 7 | Architecture diagram, design decisions, failures found, benchmarks | Not started |
 
@@ -39,8 +40,14 @@ curl -X POST --data-binary @- localhost:8200/api/ingest <<'EOF'
 EOF
 curl 'localhost:8200/api/search?start=2026-10-06T00:00:00Z'
 curl -G localhost:8200/api/search --data-urlencode 'q=level:info hello'
+make demo      # 6,000 synthetic events over the last six hours, to try the UI
+open http://localhost:8200
 make down      # the data stays in a Docker volume; `make reset` deletes it
 ```
+
+`make demo` loads made-up events shaped like Gatekeeper's access logs and
+SurgiServe's job logs, with a burst of upstream timeouts an hour ago; they
+are for trying the interface, not a measurement of anything.
 
 `make smoke` starts a separate, empty stack on :8201, checks it over HTTP
 from outside (including killing the container with SIGKILL and checking
@@ -101,7 +108,7 @@ searched with `start` and `end`, not in `q`.
 
 ### Aggregations
 
-All three take `q`, `start` and `end` like a search, count every matching
+All four take `q`, `start` and `end` like a search, count every matching
 event (not a page), and say what they read.
 
 **`GET /api/aggregate/histogram?interval=`**: matching events per time
@@ -114,6 +121,10 @@ among the matching events, with how many matched and how many had the
 field. Values group the way queries match them, so the count shown for
 `503` is exactly what `status:503` finds (503, 503.0 and "503" are one
 value; "ERROR" and "error" are one).
+
+**`GET /api/aggregate/fields?size=`**: the fields the matching events have
+(nested ones by dotted path, and their enclosing objects), with how many
+events have each.
 
 **`GET /api/aggregate/numeric?field=`**: count, min, max, mean and the 50th,
 90th, 95th and 99th percentiles (nearest rank, exact) of a field's numbers,
@@ -132,6 +143,44 @@ server buffering without limit; when the server shuts down, `event: end`.
 waiting to be deleted, the retention period, whether writes are accepted.
 
 **`GET /api/health`**: liveness only.
+
+## The interface
+
+One page: a query bar, a timeline of matching events, the fields those
+events have, and the events themselves.
+
+- **The timeline is a strip-chart recording.** It is drawn on engineering
+  paper whose fine vertical rules are the bucket boundaries, so the paper
+  itself shows how time is divided. Hover or focus a bar for its count and
+  time span; click a bar, or drag across several, to zoom in; arrow keys
+  read the bars one by one and Enter zooms; every count is also available
+  as a table.
+- **A bad query is pointed at:** the query is repeated with a caret under
+  the character the error is about. When the server groups a query
+  differently from how it was typed (`a OR b c`), the reading is shown
+  (`a OR (b c)`).
+- **Fields** lists the fields the matching events have, most common first;
+  opening one shows its top values with bars, and for numbers the min,
+  median, 99th percentile and max. Every value, there or in an opened
+  event, can be added to the query or excluded from it, written the way the
+  query language reads it (quoted when needed; an existing `OR` is put in
+  parentheses first, since `AND` binds tighter).
+- **Events** are one dense line each (time, level, service, message, the
+  other fields); one click opens the whole event as JSON.
+- **Follow live** opens the live tail for the current query; new events
+  arrive at the top, marked. A client that falls behind is told how many
+  events it missed.
+- The query and time range live in the URL, so a view can be bookmarked or
+  shared; while a new search loads, the last results stay, dimmed.
+
+Built with React and plain CSS, no component or chart library. Three
+typefaces, bundled rather than fetched from a font service, so a
+self-hosted log tool makes no requests to anyone else: Martian Mono for
+small labels, Instrument Sans for the interface, Fragment Mono for queries
+and log lines (with ligatures off, so `>=` shows as typed). The chart's blue
+was checked for contrast and lightness against both the light and the dark
+recorder paper; level icons use reserved status colors and always come
+with the level's name. Dark mode follows the system.
 
 ## How storage works
 
@@ -268,6 +317,13 @@ segments, newest first ──► outside the time range? skip
   bucket edge, an off-by-one in counting, values not grouped by number,
   events outside the time range, unchecked phrase candidates, every
   spelling of a number counted) each make them fail.
+- **The interface** (Vitest and Testing Library, 31 tests): adding a filter
+  to a query (quoting, grouping an `OR`); the timeline's bars, keyboard
+  reading, drag-to-zoom and table; the whole page against a fake API (the
+  view from the URL, a search landing in the URL, a bad query's caret, the
+  field values and the event JSON filtering, live events arriving through a
+  fake EventSource, the API not answering). Then checked in a real browser,
+  light and dark, at desktop and phone width.
 - **The live tail against a real server** (uvicorn in a thread): new
   matching events arrive and others do not; keep-alives; a client hanging
   up is unsubscribed; a SIGTERM ends open tails at once and the memtable is
@@ -317,7 +373,10 @@ make dev-ui    # UI on :5173, forwarding /api to :8000
 | `src/logscope/aggregate.py` | Histogram, top values and numeric stats, from the index |
 | `src/logscope/serve.py` | Running uvicorn, ending live tails as soon as a shutdown signal arrives |
 | `src/logscope/settings.py` | Configuration from `LOGSCOPE_*` environment variables |
-| `ui/` | The React UI (JavaScript, Vite) |
+| `ui/src/App.jsx` | The page: loading, the URL, live events |
+| `ui/src/components/` | Query bar, timeline, fields, results |
+| `ui/src/lib/` | The API client, query editing, time ranges, the live tail |
+| `scripts/demo_data.py` | Synthetic demo events (`make demo`) |
 | `scripts/smoke.sh` | Checks a running stack over HTTP, including a SIGKILL |
 | `tests/test_crash.py` | The SIGKILL test |
 | `tests/test_search.py` | The index against the scan (Hypothesis) |
@@ -409,3 +468,15 @@ make dev-ui    # UI on :5173, forwarding /api to :8000
    but each run was killed after a tenth of a second, before any merge
    finished, and it passed anyway. A new check that merges really happened
    failed at once; with a lower threshold and longer runs, they do.
+8. **The interface said things about the wrong query.** Looking at it in a
+   browser: while a new search loaded, "Read as" still showed how the
+   previous query had been read, under the new one; and after a bad query,
+   the old results stayed with nothing saying they were old. Now the
+   reading appears only for the query on screen, and the error says whose
+   results are below. A test holds a search open to check the first.
+9. **The time axis repeated itself, or said nothing.** Ticks every 90 s
+   labelled in minutes read "10:30, 10:30, 10:31" (seen in a screenshot),
+   and for an interval no round step is a multiple of, such as 7 s, the
+   first round step was a week, so the axis had no labels at all (caught by
+   a unit test). Ticks now sit on round times within the span, or every
+   n-th bar.

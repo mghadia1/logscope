@@ -23,7 +23,13 @@ from dataclasses import dataclass
 from .index import SegmentIndex, Source
 from .query import Node
 from .store import Rows, SearchStats, Store
-from .terms import canonical_number, exists_key, field_prefix, parse_number
+from .terms import (
+    EXISTS_PREFIX,
+    canonical_number,
+    exists_key,
+    field_prefix,
+    parse_number,
+)
 
 SECOND = 1_000_000
 # Bucket widths an automatic interval is chosen from.
@@ -48,6 +54,13 @@ class TopValues:
     with_field: int  # ... that have the field
     distinct: int  # distinct values among them
     values: list[tuple[str, int]]  # the top ones, most frequent first
+    stats: SearchStats
+
+
+@dataclass(frozen=True, slots=True)
+class Fields:
+    matched: int
+    fields: list[tuple[str, int]]  # (dotted path, events having it), most first
     stats: SearchStats
 
 
@@ -181,3 +194,23 @@ def numbers(
     return Numbers(
         matched, count, ordered[0][0], ordered[-1][0], total / count, percentiles, stats
     )
+
+
+def fields(store: Store, query: Node | None, start: int, end: int, size: int) -> Fields:
+    """The fields the matching events have, and how many have each: from the
+    index's exists terms, which also name enclosing objects (``http`` for
+    ``http.method``)."""
+    counts: Counter[str] = Counter()
+    matched = 0
+
+    def visit(source: Source, rows: Rows) -> None:
+        nonlocal matched
+        matched += len(rows)
+        for term, postings in source.with_prefix(EXISTS_PREFIX):
+            found = _count(postings, rows)
+            if found:
+                counts[term[len(EXISTS_PREFIX) :]] += found
+
+    stats = store.visit_matches(query, start, end, visit)
+    ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    return Fields(matched, ordered[:size], stats)

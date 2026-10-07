@@ -126,6 +126,18 @@ class TopValuesResult(BaseModel):
     stats: SearchStats
 
 
+class FieldCount(BaseModel):
+    field: str
+    count: int
+
+
+class FieldsResult(BaseModel):
+    query: str
+    matched: int
+    fields: list[FieldCount]  # the most common first
+    stats: SearchStats
+
+
 class NumbersResult(BaseModel):
     query: str
     field: str
@@ -343,6 +355,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             with_field=result.with_field,
             distinct=result.distinct,
             values=[ValueCount(value=v, count=c) for v, c in result.values],
+            stats=_stats(result.stats, took),
+        )
+
+    @app.get("/api/aggregate/fields")
+    def fields(
+        request: Request,
+        q: str = "",
+        start: str | None = None,
+        end: str | None = None,
+        size: Annotated[int, Query(ge=1, le=500)] = 50,
+    ) -> FieldsResult:
+        """The fields events matching ``q`` have, with how many have each."""
+        query = _parse_query(q)
+        start_time, end_time = _time_range(start, end, MIN_TIME, MAX_TIME)
+        began = time.perf_counter()
+        result = aggregate.fields(
+            request.app.state.store, query, start_time, end_time, size
+        )
+        took = (time.perf_counter() - began) * 1000
+        return FieldsResult(
+            query=render_query(query),
+            matched=result.matched,
+            fields=[FieldCount(field=f, count=c) for f, c in result.fields],
             stats=_stats(result.stats, took),
         )
 

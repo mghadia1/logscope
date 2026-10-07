@@ -1,53 +1,879 @@
+/* LogScope. One idea carries the look: the timeline is a strip-chart
+   recording on engineering paper, the ancestor of a log timeline. Everything
+   around it stays quiet: cool white, dense rows, ink-colored type. */
+
 :root {
-  --bg: #f8fafc;
-  --text: #0f172a;
-  --muted: #64748b;
-  --ok: #15803d;
-  --down: #b91c1c;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  color: var(--text);
-  background: var(--bg);
+  color-scheme: light;
+
+  --page: #fafcfa;
+  --raised: #ffffff;
+  --paper: #eef4ee; /* the recorder paper: the timeline's surface */
+  --paper-minor: #d9e6db;
+  --paper-major: #b9cfbe;
+  --rule: #dce4de;
+  --row-hover: #f1f6f2;
+
+  --ink: #16211b;
+  --ink-2: #4e5d54;
+  --ink-3: #56645b;
+
+  --bar: #2a78d6; /* the one series: validated against --paper */
+  --bar-hover: #5598e7;
+  --selection: rgb(42 120 214 / 14%);
+  --accent: #2a78d6;
+
+  --critical: #d03b3b;
+  --warning: #fab219;
+
+  --font-ui: "Instrument Sans Variable", "Instrument Sans", system-ui, sans-serif;
+  --font-mono: "Fragment Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-label: "Martian Mono", ui-monospace, monospace;
+
+  --radius: 6px;
+  font-family: var(--font-ui);
+  /* Fragment Mono draws ">=" as one "≥": in a query language the screen must
+     show the characters to type. */
+  font-variant-ligatures: none;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--page);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f172a;
-    --text: #e2e8f0;
-    --muted: #94a3b8;
-    --ok: #4ade80;
-    --down: #f87171;
+    color-scheme: dark;
+
+    --page: #0f1411;
+    --raised: #141a16;
+    --paper: #151b17;
+    --paper-minor: #202a23;
+    --paper-major: #2e3b32;
+    --rule: #243028;
+    --row-hover: #18201b;
+
+    --ink: #e8eee9;
+    --ink-2: #aab7ae;
+    --ink-3: #8a978e;
+
+    --bar: #3987e5;
+    --bar-hover: #6da7ec;
+    --selection: rgb(57 135 229 / 20%);
+    --accent: #6da7ec;
   }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--page);
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Small instrument labels: the one place the display face appears besides
+   the wordmark. */
+.label {
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
 }
 
 .app {
-  max-width: 960px;
+  max-width: 1440px;
   margin: 0 auto;
-  padding: 32px 16px;
+  padding: 20px 24px 48px;
 }
 
-h1 {
+/* Masthead: the wordmark and the query bar on one line. */
+
+.masthead {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 28px;
+  align-items: start;
+  padding-bottom: 18px;
+}
+
+.wordmark {
+  margin: 22px 0 0;
+  font-family: var(--font-label);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.wordmark span {
+  color: var(--bar);
+}
+
+.querybar {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 12px;
+  align-items: start;
+}
+
+.query-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.query-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--raised);
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.query-input::placeholder {
+  color: var(--ink-3);
+}
+
+.query-input.has-error {
+  border-color: var(--critical);
+}
+
+.query-error pre {
   margin: 0;
-  font-size: 1.75rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--ink-2);
 }
 
-.tagline {
-  margin: 4px 0 24px;
-  color: var(--muted);
+.query-error p,
+.query-understood,
+.live-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
 }
 
-.api-checking {
-  color: var(--muted);
+.query-error p.query-stale::before {
+  content: none;
 }
 
-.api-ok {
-  color: var(--ok);
+.query-error p::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 1px;
+  background: var(--critical);
+  transform: rotate(45deg);
 }
 
-.api-down {
-  color: var(--down);
+.query-understood code {
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+
+.query-controls {
+  display: flex;
+  gap: 8px;
+  padding-top: 19px;
+}
+
+.live-note {
+  grid-column: 1 / -1;
+}
+
+.range-select select,
+.button,
+.zoom-chip {
+  height: 40px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--raised);
+}
+
+.range-select select {
+  padding: 0 10px;
+}
+
+.button {
+  padding: 0 16px;
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--page);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.button-quiet {
+  border-color: var(--rule);
+  background: var(--raised);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.button:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.live-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+}
+
+/* On: an outline and a filled dot in the series blue; the label stays in
+   ink (white on this blue would be under 4.5:1). */
+.live-toggle.is-on {
+  border-color: var(--bar);
+  background: var(--raised);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--bar);
+}
+
+.live-toggle.is-on .live-dot {
+  border-color: var(--bar);
+  background: var(--bar);
+}
+
+.zoom-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px 0 12px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.icon-button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  border-color: var(--rule);
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.text-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.failure {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-left: 3px solid var(--critical);
+  background: var(--raised);
+}
+
+.loading,
+.empty {
+  color: var(--ink-2);
+}
+
+/* While a new search loads, the last one stays, dimmed: no flash, no
+   layout jump. */
+.is-busy {
+  opacity: 0.55;
+  transition: opacity 120ms;
+}
+
+/* The timeline: the signature. */
+
+.timeline {
+  margin-bottom: 18px;
+}
+
+.timeline-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  margin-bottom: 8px;
+}
+
+.timeline-summary {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.timeline-head .text-button {
+  margin-left: auto;
+}
+
+.timeline-paper {
+  position: relative;
+  border: 1px solid var(--paper-major);
+  border-radius: var(--radius);
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.timeline-chart {
+  display: block;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.timeline-chart:focus-visible {
+  outline-offset: -3px;
+}
+
+.grid line {
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.grid .minor {
+  stroke: var(--paper-minor);
+}
+
+.grid .major {
+  stroke: var(--paper-major);
+}
+
+.grid .baseline {
+  stroke: var(--ink-3);
+}
+
+.axis text {
+  fill: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bar {
+  fill: var(--bar);
+}
+
+.bar.is-hovered {
+  fill: var(--bar-hover);
+}
+
+.selection {
+  fill: var(--selection);
+}
+
+.timeline-empty {
+  margin: 0;
+  padding: 52px 0;
+  text-align: center;
+  color: var(--ink-2);
+}
+
+.tooltip {
+  position: absolute;
+  top: 6px;
+  width: 160px;
+  padding: 6px 10px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--raised);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 8%);
+  font-size: 12.5px;
+  pointer-events: none;
+}
+
+.tooltip strong {
+  font-size: 15px;
+}
+
+.tooltip span {
+  display: block;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.counts-table {
+  margin-top: 10px;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.counts-table caption {
+  margin-bottom: 4px;
+  text-align: left;
+}
+
+.counts-table th,
+.counts-table td {
+  padding: 3px 16px 3px 0;
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.counts-table td:last-child,
+.counts-table th:last-child {
+  text-align: right;
+}
+
+/* Fields and results. */
+
+.columns {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.fields .label {
+  margin-bottom: 8px;
+}
+
+.field-list,
+.field-values ul,
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.field {
+  border-bottom: 1px solid var(--rule);
+}
+
+.field-name {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 2px;
+  border: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.field-name span:first-child {
+  overflow-wrap: anywhere;
+}
+
+.field-name:hover,
+.field.is-open .field-name {
+  color: var(--accent);
+}
+
+.field-count {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.field-values {
+  padding: 2px 0 10px;
+}
+
+.value {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.value-pick {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1px 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.value-pick:hover:not(:disabled) {
+  background: var(--row-hover);
+}
+
+.value-pick:disabled {
+  cursor: default;
+}
+
+.value-text {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.value-count {
+  color: var(--ink-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.value-bar {
+  grid-column: 1 / -1;
+  height: 4px;
+}
+
+.value-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 0 2px 2px 0;
+  background: var(--bar);
+}
+
+.field-note {
+  margin: 2px 0 8px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.field-note.is-error {
+  color: var(--ink);
+}
+
+.field-numbers {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: 8px 0 0;
+  padding: 6px;
+  border-radius: 4px;
+  background: var(--row-hover);
+}
+
+.field-numbers dt {
+  font-family: var(--font-label);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.field-numbers dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.results-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin-bottom: 8px;
+}
+
+.results-stats {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.rows {
+  border-top: 1px solid var(--rule);
+}
+
+.row {
+  border-bottom: 1px solid var(--rule);
+}
+
+.row.is-fresh {
+  box-shadow: inset 3px 0 0 var(--bar);
+  animation: arrive 1.6s ease-out;
+}
+
+@keyframes arrive {
+  from {
+    background: var(--selection);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row.is-fresh {
+    animation: none;
+  }
+
+  .is-busy {
+    transition: none;
+  }
+}
+
+.row-summary {
+  display: grid;
+  grid-template-columns: 11ch 7.5ch minmax(0, 11ch) minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row-summary:hover,
+.row.is-open .row-summary {
+  background: var(--row-hover);
+}
+
+.row-time {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.row-service {
+  overflow: hidden;
+  color: var(--ink-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-message {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-extra {
+  color: var(--ink-2);
+}
+
+.row-key,
+.row-raw {
+  color: var(--ink-3);
+}
+
+.level {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+.level svg {
+  flex: none;
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+/* The icon carries the status color; the label stays in ink. */
+.level-error svg {
+  color: var(--critical);
+}
+
+.level-warn svg {
+  color: var(--warning);
+}
+
+.level-info svg,
+.level-debug svg,
+.level-other svg {
+  color: var(--ink-3);
+}
+
+.level-info,
+.level-debug,
+.level-other {
+  color: var(--ink-2);
+}
+
+.row-detail {
+  padding: 8px 8px 12px calc(11ch + 20px);
+  background: var(--row-hover);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.json-object {
+  display: grid;
+  margin: 0;
+}
+
+.json-object .json-object,
+.json-list {
+  padding-left: 16px;
+  border-left: 1px solid var(--rule);
+}
+
+.json-list {
+  margin: 0;
+  list-style: none;
+}
+
+.json-entry {
+  display: grid;
+  grid-template-columns: minmax(8ch, max-content) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.json-entry dt {
+  color: var(--ink-2);
+}
+
+.json-entry dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.json-leaf {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.json-value {
+  overflow-wrap: anywhere;
+}
+
+.json-null,
+.json-boolean {
+  font-style: italic;
+  color: var(--ink-2);
+}
+
+.json-actions {
+  display: inline-flex;
+  opacity: 0;
+}
+
+.json-leaf:hover .json-actions,
+.json-leaf:focus-within .json-actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .json-actions {
+    opacity: 1;
+  }
+}
+
+.row-meta {
+  margin: 8px 0 0;
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+.load-older {
+  margin-top: 14px;
+}
+
+/* Narrow screens: one column, the fields after the results' heading. */
+
+@media (max-width: 900px) {
+  .app {
+    padding: 16px 16px 40px;
+  }
+
+  .masthead,
+  .querybar {
+    grid-template-columns: 1fr;
+  }
+
+  .wordmark {
+    margin-top: 0;
+  }
+
+  .query-controls {
+    padding-top: 0;
+  }
+
+  .range-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .range-select select {
+    width: 100%;
+  }
+
+  .columns {
+    grid-template-columns: 1fr;
+  }
+
+  .fields {
+    order: 2;
+  }
+
+  .row-summary {
+    grid-template-columns: 11ch 7.5ch minmax(0, 1fr);
+  }
+
+  .row-service {
+    display: none;
+  }
+
+  .row-detail {
+    padding-left: 8px;
+  }
+
+  .hint {
+    display: none;
+  }
 }

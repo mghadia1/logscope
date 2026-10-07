@@ -2,7 +2,7 @@ PYTHON ?= python3.14
 VENV := .venv
 BIN := $(VENV)/bin
 
-.PHONY: install lint format typecheck test ui check dev-api dev-ui up down reset smoke clean
+.PHONY: install lint format typecheck test ui check dev-api dev-ui up down reset demo smoke clean
 
 $(BIN)/python:
 	$(PYTHON) -m venv $(VENV)
@@ -54,6 +54,11 @@ down:
 # Also delete the data volume.
 reset:
 	docker compose down --volumes
+
+# Load synthetic demo events (shaped like Gatekeeper's and SurgiServe's
+# logs, the last six hours) into the stack `make up` started.
+demo:
+	python3 scripts/demo_data.py
 
 # Check a fresh stack over HTTP from outside. It runs as its own Compose
 # project, with its own volume and port, so it starts empty every time and

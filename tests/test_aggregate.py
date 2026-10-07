@@ -120,6 +120,22 @@ def test_numeric_stats_equal_those_of_the_scanned_events(
         )
 
 
+@settings(max_examples=150, deadline=None)
+@given(text=queries, window=ranges)
+def test_each_field_counts_the_events_that_have_it(
+    store: Store, text: str, window: tuple[int, int]
+) -> None:
+    start, end = window
+    query = parse(text)
+    result = aggregate.fields(store, query, start, end, size=1000)
+    assert result.matched == scan_count(store, query, start, end)
+    for field, count in result.fields:
+        assert count == scan_count(store, both(query, ExistsTerm(field)), start, end)
+    if result.matched:
+        # Every event has at least level, service and msg.
+        assert {"level", "service", "msg"} <= {f for f, _ in result.fields}
+
+
 def test_histogram_without_a_query_counts_by_bisection(store: Store) -> None:
     # Whole time windows of a segment are counted from its sorted times
     # alone: no event is read.

@@ -127,4 +127,7 @@ expect "top values" "$(python3 -c 'import json, sys; b = json.loads(sys.argv[1])
 numeric="$(aggregate --data-urlencode "field=n" "$base_url/api/aggregate/numeric")"
 expect "numeric stats" "$(python3 -c 'import json, sys; b = json.loads(sys.argv[1]); print(b["count"], b["min"], b["max"], b["mean"])' "$numeric")" "2 1 2 1.5"
 
+fields="$(aggregate --data-urlencode "q=service:smoke" "$base_url/api/aggregate/fields")"
+expect "field list" "$(python3 -c 'import json, sys; print(" ".join(f["field"] for f in json.loads(sys.argv[1])["fields"]))' "$fields")" "msg n service"
+
 echo "smoke test passed"

@@ -365,3 +365,16 @@ def test_events_older_than_the_retention_period_are_refused(tmp_path: Path) -> N
         assert result["errors"] == [
             {"line": 2, "error": "older than the retention period"}
         ]
+
+
+def test_fields_over_http(api: TestClient) -> None:
+    api.post("/api/ingest", content=GATEKEEPER_AND_SURGISERVE)
+    body = api.get("/api/aggregate/fields", params={"q": "service:gatekeeper"}).json()
+    assert body["matched"] == 2
+    assert body["fields"] == [
+        {"field": "level", "count": 2},
+        {"field": "msg", "count": 2},
+        {"field": "route", "count": 2},
+        {"field": "service", "count": 2},
+        {"field": "status", "count": 2},
+    ]

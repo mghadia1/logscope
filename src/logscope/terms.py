@@ -51,8 +51,11 @@ def word_key(word: str) -> str:
     return f"t\0{word}"
 
 
+EXISTS_PREFIX = "e\0"  # every exists key starts with it: the field list
+
+
 def exists_key(path: str) -> str:
-    return f"e\0{path}"
+    return f"{EXISTS_PREFIX}{path}"
 
 
 def tokens(text: str) -> list[str]:
