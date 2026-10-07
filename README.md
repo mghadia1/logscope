@@ -9,10 +9,10 @@ logs of two earlier projects, SurgiServe and Gatekeeper.
 It deliberately does not use Elasticsearch, OpenSearch, Loki, ClickHouse or
 SQLite's full-text search: the point is to build the parts they provide.
 
-> **Status:** Milestones 0-2 of 7. Events can be ingested, survive crashes,
-> and be searched by time range and by terms through an inverted index. The
-> query form is minimal (terms that must all match); the real query
-> language is Milestone 3, and the UI is still a shell.
+> **Status:** Milestones 0-3 of 7. Events can be ingested, survive crashes,
+> and be searched with a small query language (fields, words, phrases,
+> numeric ranges, AND/OR/NOT) through an inverted index. There are no
+> aggregations or live tail yet (Milestone 4), and the UI is still a shell.
 
 ## Status
 
@@ -21,7 +21,7 @@ SQLite's full-text search: the point is to build the parts they provide.
 | 0 | Skeleton: FastAPI `/api/health`, React (Vite, JavaScript) shell served by the API, ruff + mypy --strict + pytest, ESLint + Vitest, CI, one-container Compose | Done |
 | 1 | Ingestion and storage: `POST /api/ingest`, append-only write-ahead log with crash recovery, time-partitioned segments, search by time range by scanning | Done |
 | 2 | Inverted index per segment; segment time bounds to skip segments; indexed results checked against the scan | Done |
-| 3 | Query language (`level:error service:gatekeeper status>=500 "upstream timeout" NOT route:/healthz`), positioned errors; property test: index equals scan | Not started |
+| 3 | Query language (`level:error service:gatekeeper status>=500 "upstream timeout" NOT route:/healthz`), positioned errors; property test: index equals scan | Done |
 | 4 | Aggregations, live tail over Server-Sent Events, retention, merging small segments | Not started |
 | 5 | React UI: query box, results, histogram, field sidebar, live tail | Not started |
 | 6 | Real logs (SurgiServe, Gatekeeper) through a shipper; measured ingest rate and query latency, index vs scan | Not started |
@@ -69,17 +69,34 @@ per line.
 matching `q` with `start <= time < end` (ISO 8601 with a time zone; both
 optional), newest first, at most `limit` (1-1000, default 100). Pass
 `next_cursor` back as `cursor` for the next page. `index=false` scans every
-event instead (the baseline). The answer says how many segments were read
-or skipped and how many events were read.
+event instead (the baseline). The answer shows the query as it was
+understood, with its grouping explicit (`a OR b c` comes back as
+`a OR (b c)`), and says how many segments were read or skipped, how many
+events were read, and how many had to be checked against the query.
 
-`q` is, for now, terms separated by spaces, all of which must match
-(Milestone 3 brings OR, NOT, parentheses, phrases and ranges):
+A bad query is a 422 that says what is wrong and where:
+`{"detail": {"error": "this ( is never closed", "position": 12}}`.
 
-- `field:value` matches a field's whole value: `level:error` (also "ERROR"),
-  `status:503` (also 503.0 and "503"), `http.method:get` (nested objects use
-  dots; array elements count as the array's field).
-- a bare word matches that word anywhere in the event: `timeout`. A word
-  with several parts, like `3f2a-77`, needs all of them.
+### The query language
+
+```
+level:error service:gatekeeper status>=500 "upstream timeout" NOT route:/healthz
+```
+
+| Term | Matches |
+|------|---------|
+| `field:value` | the field's whole value, case-insensitively: `level:error` finds "ERROR". Numbers match by value, whether written as numbers or as numeric strings: `status:503` finds 503, 503.0, "503" and "503.0" |
+| `field:"a value"` | the same, quoted for spaces or `( ) "`: `route:"GET /users/{id}"` |
+| `field:*` | the field is present (also an enclosing object: `http:*`) |
+| `field>=N`, `>N`, `<=N`, `<N` | a numeric range, over numbers and numeric strings |
+| `word` | the word anywhere in the event; `3f2a-77` (several parts) is a phrase |
+| `"a phrase"` | the words, consecutively, within one value |
+
+Combined, tightest first: `NOT x`; `x y` or `x AND y` (both); `x OR y`
+(either); parentheses to group. `AND`, `OR` and `NOT` are operators only in
+capitals: "not" is a word. Nested fields use dots (`http.method`); an
+array's elements count as the array's field. The timestamp fields are
+searched with `start` and `end`, not in `q`.
 
 **`GET /api/stats`**: events in memory and in segments, WAL files, whether
 writes are accepted.
@@ -134,11 +151,12 @@ segments, newest first ──► outside the time range? skip
         ▼
  segment index (.idx, memory-mapped)
    times + ids of every row ──► binary search: the rows in the time range
-   term directory (sorted)  ──► binary search: each term's rows
-        │  field term: any of its spellings (union); word: all parts;
-        │  terms: all of them (intersection)
+   term directory (sorted)  ──► binary search: a term's rows, or (ranges)
+        │                       the run of one field's values
+        │  the query tree, bottom up: candidate rows + "exact or not"
         ▼
- matching rows, newest first ──► read just those lines of the .jsonl
+ candidates, newest first ──► read the row ──► not exact? check it
+                                               against the query
 ```
 
 - **One function decides what an event contains,** `terms_of`, and both the
@@ -150,8 +168,21 @@ segments, newest first ──► outside the time range? skip
   row's time and id. A search orders and filters rows without reading
   them, reads only the ones it returns, and stops once nothing older can
   make the top `limit`.
+- **The index narrows; it does not have to decide.** Each part of a query
+  gives a set of candidate rows that contains every match, and says
+  whether it is exact. Most terms are exact. A phrase is not: the index
+  knows its words are in a row, not that they are consecutive. That
+  carries up the tree: `NOT` of something inexact cannot be a complement,
+  so every row becomes a candidate; `AND` and `OR` are exact only if all
+  their parts are. Inexact candidates are checked against the event with
+  the same function the full scan uses.
 - **Events still in memory** have their own in-memory index, so a search
   sees them at once, including those being flushed.
+- **Ranges walk one field's values:** the directory is sorted, so a field's
+  terms are one run, found by bisection, and each value is compared. A
+  field with mostly distinct values (durations) makes that run as long as
+  the segment, which makes ranges over such fields the slowest kind of
+  query; a sorted numeric column per field would fix it.
 - **Not indexed:** the timestamp fields (the time range covers them), and
   string values over 256 characters as exact values (they are still
   indexed word by word; asking for one exactly is refused, not missed).
@@ -169,12 +200,16 @@ segments, newest first ──► outside the time range? skip
   160 kills (40 seeds) lost and duplicated nothing.
 - The smoke test SIGKILLs the container itself and checks that an event
   held only in the WAL comes back.
-- **The index against the scan:** Hypothesis generates 400 combinations of
-  query, time range, limit and cursor over a store whose segments overlap in
-  time (late events), with some events still in memory; the index must
-  return the same events in the same order as the full scan. Five
-  deliberately planted bugs (a tie-break, both ends of the time range, a
-  union, the reading order) each make it fail.
+- **The index against the scan:** Hypothesis generates 600 combinations of
+  a random query tree (AND, OR, NOT, phrases, ranges, fields that exist),
+  time range, limit and cursor over a store whose segments overlap in time
+  (late events), with some events still in memory; the index must return
+  the same events in the same order as the full scan. Ten deliberately
+  planted bugs (a tie-break, both ends of the time range, a union, the
+  reading order, and five in how exactness combines) each make it fail.
+- **The parser:** precedence, every term, 16 errors with their exact
+  positions, and a Hypothesis property: any query, shown back and parsed
+  again, gives the same tree.
 - A search during a flush, with events both in the memtable being flushed
   and in the new one.
 
@@ -204,13 +239,14 @@ make dev-ui    # UI on :5173, forwarding /api to :8000
 | `src/logscope/wal.py` | The write-ahead log: record format, torn-tail detection |
 | `src/logscope/store.py` | Memtable, flushes, segments, manifest, recovery, search |
 | `src/logscope/terms.py` | What an event is indexed under (`terms_of`) |
-| `src/logscope/query.py` | Parsing `q`; the scan's match test |
-| `src/logscope/index.py` | Segment index files (build, memory-mapped lookup); the in-memory index |
+| `src/logscope/query.py` | The query language: lexer, parser, positioned errors; matching one event |
+| `src/logscope/index.py` | Segment index files (build, memory-mapped lookup); the in-memory index; evaluating a query to candidates |
 | `src/logscope/settings.py` | Configuration from `LOGSCOPE_*` environment variables |
 | `ui/` | The React UI (JavaScript, Vite) |
 | `scripts/smoke.sh` | Checks a running stack over HTTP, including a SIGKILL |
 | `tests/test_crash.py` | The SIGKILL test |
 | `tests/test_search.py` | The index against the scan (Hypothesis) |
+| `tests/test_query.py` | The parser, its errors, and matching |
 
 ## Decisions so far
 
@@ -230,8 +266,15 @@ make dev-ui    # UI on :5173, forwarding /api to :8000
   parsing to open.
 - **Field values match case-insensitively, numbers by value.** `level:info`
   finds "INFO" (SurgiServe writes "info", Gatekeeper "INFO"), and
-  `status:503` finds 503, 503.0 and "503". A value is a number only in JSON's
-  syntax, so `code:007` matches the string "007", not 7.
+  `status:503` finds 503, 503.0, "503" and "503.0". A value is a number only
+  in JSON's syntax, so `code:007` matches the string "007", not 7.
+- **Operators only in capitals.** "not" and "or" are common in log messages;
+  only `NOT` and `OR` are operators.
+- **`status:>=500` is an error, not a search.** Other tools write ranges that
+  way; here it would silently be an exact match on the text ">=500", so the
+  error says to drop the colon.
+- **The answer shows the parsed query,** with its grouping explicit, so
+  `a OR b c` meaning `a OR (b c)` is never a surprise.
 - **JavaScript, not TypeScript, for the UI:** TypeScript is not yet a
   language I can write and explain unaided.
 
@@ -257,4 +300,11 @@ make dev-ui    # UI on :5173, forwarding /api to :8000
    seconds, so equal times at segment edges almost never happened; few sat
    exactly on a range boundary; and no query value had two spellings. With
    times on a 5-minute grid and values like `503.0`, all five planted bugs
-   now fail it.
+   now fail it. It happened again with the query language: a planted bug
+   in how `OR` treats an inexact part survived, because random queries
+   rarely put `NOT "a phrase"` inside an `OR`. Phrases are now half the
+   generated terms, and six such shapes run every time.
+5. **`status:503` and `status>=503` disagreed about "503.0".** Ranges read
+   strings that are numbers as numbers; exact matches compared spellings.
+   A test of one event against both caught it; a string that is a number
+   now also gets its number's index key, so the two agree.

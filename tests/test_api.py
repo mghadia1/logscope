@@ -226,10 +226,42 @@ def test_query_terms_filter_with_and_without_the_index(
     assert found == expected
 
 
-def test_a_bad_query_is_422_with_a_reason(api: TestClient) -> None:
-    response = api.get("/api/search", params={"q": "level:"})
+def test_a_bad_query_is_422_with_the_position_of_the_problem(api: TestClient) -> None:
+    response = api.get("/api/search", params={"q": "level:error (status>=500"})
     assert response.status_code == 422
-    assert "expected field:value" in response.json()["detail"]
+    assert response.json()["detail"] == {
+        "error": "this ( is never closed",
+        "position": 12,
+    }
+
+
+@pytest.mark.parametrize("use_index", ["true", "false"])
+@pytest.mark.parametrize(
+    ("q", "expected"),
+    [
+        ('"upstream timeout"', ["upstream timeout"]),
+        ('"timeout upstream"', []),  # both words, wrong order
+        ("status>=500", ["upstream timeout"]),
+        ("attempt>=2", ["job failed"]),
+        ("level:error NOT service:surgiserve", ["upstream timeout"]),
+        ("service:surgiserve OR status<300", ["job failed", "request"]),
+        ("job_id:*", ["job failed"]),
+        ('route:"GET /users/{id}" NOT timeout', ["request"]),
+        ("NOT (level:error OR status:*)", []),
+    ],
+)
+def test_the_query_language_over_http(
+    api: TestClient, q: str, expected: list[str], use_index: str
+) -> None:
+    api.post("/api/ingest", content=GATEKEEPER_AND_SURGISERVE)
+    body = api.get("/api/search", params={"q": q, "index": use_index}).json()
+    found = [e["event"].get("msg") or e["event"]["event"] for e in body["events"]]
+    assert found == expected
+
+
+def test_the_answer_shows_how_the_query_was_grouped(api: TestClient) -> None:
+    body = api.get("/api/search", params={"q": "level:error OR status>=500 timeout"})
+    assert body.json()["query"] == "level:error OR (status>=500 timeout)"
 
 
 def test_search_stats_show_what_the_index_saved(api: TestClient) -> None:
@@ -240,4 +272,7 @@ def test_search_stats_show_what_the_index_saved(api: TestClient) -> None:
         "stats"
     ]
     assert (indexed["events_read"], indexed["candidates"]) == (1, 1)
-    assert scanned["events_read"] == 3
+    assert indexed["checked"] == 0  # a word: the index alone decides
+    assert (scanned["events_read"], scanned["checked"]) == (3, 3)
+    phrase = api.get("/api/search", params={"q": '"upstream timeout"'}).json()
+    assert phrase["stats"]["checked"] == 1  # the one candidate, checked

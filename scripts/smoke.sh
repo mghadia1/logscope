@@ -3,7 +3,8 @@
 # endpoint, the built UI and its bundle, JSON 404s, 405s with Allow, that
 # the container runs unprivileged with a writable data volume, and that
 # ingested events are searchable and survive both a clean restart and a
-# SIGKILL of the container, and that query terms work through the index.
+# SIGKILL of the container, and that queries (the language) work through
+# the index.
 set -euo pipefail
 base_url="${BASE_URL:-http://localhost:8200}"
 
@@ -87,5 +88,15 @@ expect "q=third (memtable)" "$(query third)" "third"
 expect "q=service:smoke without the index" "$(query service:smoke false)" "second first"
 expect "q=nothing-like-this" "$(query nothing-like-this)" ""
 expect "bad query" "$(status --get --data-urlencode 'q=level:' "$base_url/api/search")" "422"
+
+# Milestone 3: the query language.
+expect "OR" "$(query 'first OR third')" "third first"
+expect "NOT" "$(query 'service:smoke NOT first')" "second"
+expect "field exists" "$(query 'service:*')" "second first"
+expect "phrase, NOT around it (checked, not indexed)" "$(query 'NOT "smoke second"')" "third second first"
+detail="$(curl --silent --get --data-urlencode 'q=first (second' "$base_url/api/search")"
+expect "error position" "$(python3 -c 'import json, sys; print(json.loads(sys.argv[1])["detail"]["position"])' "$detail")" "6"
+grouped="$(curl --silent --get --data-urlencode 'q=first OR second third' "$base_url/api/search")"
+expect "grouping shown" "$(field "$grouped" query)" "first OR (second third)"
 
 echo "smoke test passed"

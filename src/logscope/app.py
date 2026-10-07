@@ -25,6 +25,7 @@ from .events import MAX_TIME, MIN_TIME, LineError, format_time, now, parse_time
 from .ingest import BatchTooLarge, parse_batch
 from .query import QueryError
 from .query import parse as parse_query
+from .query import render as render_query
 from .settings import Settings
 from .store import Store, StoreUnavailable
 
@@ -68,10 +69,16 @@ class SearchStats(BaseModel):
     events_read: int
     # Rows the index matched within the time range (0 without the index).
     candidates: int
+    # Events tested against the query itself: where the index cannot decide
+    # alone (a phrase), and every event without the index.
+    checked: int
     took_ms: float
 
 
 class SearchResult(BaseModel):
+    # The query as understood, with its grouping explicit: "a OR b c" comes
+    # back as "a OR (b c)".
+    query: str
     events: list[EventOut]
     # Pass as ?cursor= for the next (older) page; null on the last page.
     next_cursor: str | None
@@ -163,9 +170,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Events matching ``q`` with start <= time < end, newest first.
         ``index=false`` scans every event instead (the baseline)."""
         try:
-            terms = parse_query(q)
+            query = parse_query(q)
         except QueryError as error:
-            raise HTTPException(status_code=422, detail=str(error)) from None
+            # The position lets a client point at the problem.
+            raise HTTPException(
+                status_code=422,
+                detail={"error": error.message, "position": error.position},
+            ) from None
         start_time = _query_time(start, "start", MIN_TIME)
         end_time = _query_time(end, "end", MAX_TIME)
         if start_time >= end_time:
@@ -174,7 +185,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         began = time.perf_counter()
         # One extra, to know whether there is a next page.
         events, stats = store.search(
-            terms, start_time, end_time, limit + 1, _cursor(cursor), use_index=index
+            query, start_time, end_time, limit + 1, _cursor(cursor), use_index=index
         )
         took = (time.perf_counter() - began) * 1000
         page = events[:limit]
@@ -182,6 +193,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if len(events) > limit:
             next_cursor = f"{page[-1].time}:{page[-1].id}"
         return SearchResult(
+            query=render_query(query),
             events=[
                 EventOut(id=e.id, time=format_time(e.time), event=e.data) for e in page
             ],
@@ -192,6 +204,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 segments_skipped=stats.segments_skipped,
                 events_read=stats.events_read,
                 candidates=stats.candidates,
+                checked=stats.checked,
                 took_ms=round(took, 3),
             ),
         )

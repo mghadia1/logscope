@@ -20,11 +20,22 @@ import mmap
 import struct
 import sys
 from array import array
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
+from typing import Protocol
 
 from .events import Event
-from .query import FieldTerm, Term
+from .query import (
+    And,
+    ExistsTerm,
+    FieldTerm,
+    Node,
+    Not,
+    Or,
+    PhraseTerm,
+    RangeTerm,
+    WordTerm,
+)
 
 if sys.byteorder != "little":  # arrays are written in native order
     raise ImportError("the index format is little-endian only")
@@ -93,24 +104,42 @@ class SegmentIndex:
         self._postings = view[position:].cast("I")
         self._terms = terms
 
-    def lookup(self, key: str) -> Sequence[int]:
-        """The rows holding a term, ascending; binary search of the
-        directory."""
-        target = key.encode()
+    def _key(self, entry: int) -> tuple[bytes, int, int]:
+        start, length, first, count = ENTRY.unpack_from(
+            self._directory, entry * ENTRY.size
+        )
+        return bytes(self._blob[start : start + length]), first, count
+
+    def _first_at_least(self, target: bytes) -> int:
+        """The first directory entry whose term is >= target (bisection)."""
         low, high = 0, self._terms
         while low < high:
             middle = (low + high) // 2
-            start, length, first, count = ENTRY.unpack_from(
-                self._directory, middle * ENTRY.size
-            )
-            probe = bytes(self._blob[start : start + length])
-            if probe < target:
+            if self._key(middle)[0] < target:
                 low = middle + 1
-            elif probe > target:
-                high = middle
             else:
+                high = middle
+        return low
+
+    def lookup(self, key: str) -> Sequence[int]:
+        """The rows holding a term, ascending."""
+        target = key.encode()
+        entry = self._first_at_least(target)
+        if entry < self._terms:
+            term, first, count = self._key(entry)
+            if term == target:
                 return self._postings[first : first + count]
         return _EMPTY
+
+    def with_prefix(self, prefix: str) -> Iterator[tuple[str, Sequence[int]]]:
+        """Every term starting with ``prefix``, with its rows: the directory is
+        sorted, so they are one run, found by bisection."""
+        target = prefix.encode()
+        for entry in range(self._first_at_least(target), self._terms):
+            term, first, count = self._key(entry)
+            if not term.startswith(target):
+                return
+            yield term.decode(), self._postings[first : first + count]
 
 
 class MemIndex:
@@ -121,6 +150,10 @@ class MemIndex:
         self._postings: dict[str, array[int]] = {}
 
     def __len__(self) -> int:
+        return len(self.events)
+
+    @property
+    def rows(self) -> int:
         return len(self.events)
 
     def add(self, event: Event, terms: Iterable[str]) -> None:
@@ -135,25 +168,91 @@ class MemIndex:
     def lookup(self, key: str) -> Sequence[int]:
         return self._postings.get(key, _EMPTY)
 
+    def with_prefix(self, prefix: str) -> Iterator[tuple[str, Sequence[int]]]:
+        for term, postings in self._postings.items():
+            if term.startswith(prefix):
+                yield term, postings
 
-def candidate_rows(
-    lookup: Callable[[str], Sequence[int]], query: list[Term]
-) -> set[int] | None:
-    """The rows matching every term, or None for an empty query (every row).
 
-    A field term matches any of its keys (a union); a text term needs all of
-    its words (an intersection); the terms themselves are intersected.
+class Source(Protocol):
+    """What evaluation needs from an index: a segment's, or the memtable's."""
+
+    @property
+    def rows(self) -> int: ...
+
+    def lookup(self, key: str) -> Sequence[int]: ...
+
+    def with_prefix(self, prefix: str) -> Iterator[tuple[str, Sequence[int]]]: ...
+
+
+def evaluate(node: Node | None, source: Source) -> tuple[set[int] | None, bool]:
+    """The rows that may match, and whether they are exactly the matches.
+
+    The rows are always a superset of the matches (None means every row).
+    Most terms are exact. A phrase is not: the index knows its words are in
+    a row, not that they are consecutive. Inexact candidates must be checked
+    against the events themselves, with ``query.matches``.
     """
-    result: set[int] | None = None
-    for term in query:
-        keys = iter(term.keys)
-        rows = set(lookup(next(keys)))
-        for key in keys:
-            if isinstance(term, FieldTerm):
-                rows.update(lookup(key))
-            else:
-                rows.intersection_update(lookup(key))
-        result = rows if result is None else result & rows
-        if not result:
-            return set()
-    return result
+    rows, exact = _evaluate(node, source)
+    if rows is not None and not rows:
+        exact = True  # no candidates: certainly no matches
+    return rows, exact
+
+
+def _evaluate(node: Node | None, source: Source) -> tuple[set[int] | None, bool]:
+    match node:
+        case None:
+            return None, True
+        case FieldTerm():
+            rows: set[int] = set()
+            for key in node.keys:  # any one of its spellings
+                rows.update(source.lookup(key))
+            return rows, True
+        case WordTerm() | ExistsTerm():
+            return set(source.lookup(node.key)), True
+        case PhraseTerm():
+            keys = iter(node.keys)
+            rows = set(source.lookup(next(keys)))
+            for key in keys:
+                rows.intersection_update(source.lookup(key))
+            return rows, False
+        case RangeTerm():
+            rows = set()
+            cut = len(node.prefix)
+            for term, postings in source.with_prefix(node.prefix):
+                if node.accepts(term[cut:]):
+                    rows.update(postings)
+            return rows, True
+        case Not(child):
+            child_rows, child_exact = evaluate(child, source)
+            if not child_exact:
+                # The complement of a superset is not a superset: every row
+                # is a candidate, and each must be checked.
+                return None, False
+            if child_rows is None:
+                return set(), True
+            return set(range(source.rows)) - child_rows, True
+        case And(children):
+            result: set[int] | None = None
+            exact = True
+            for child in children:
+                child_rows, child_exact = evaluate(child, source)
+                exact = exact and child_exact
+                if child_rows is not None:
+                    result = child_rows if result is None else result & child_rows
+                    if not result:
+                        return set(), True
+            return result, exact
+        case Or(children):
+            union: set[int] = set()
+            exact = True
+            for child in children:
+                child_rows, child_exact = evaluate(child, source)
+                if child_rows is None:
+                    # Every row may match; exactly so only if this child is
+                    # exact (then every row does match).
+                    return None, child_exact
+                union |= child_rows
+                exact = exact and child_exact
+            return union, exact
+    raise TypeError(node)

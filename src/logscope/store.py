@@ -49,7 +49,7 @@ from typing import Any
 
 from . import index, wal
 from .events import EPOCH, MAX_TIME, MIN_TIME, Event, ParsedLine
-from .query import Term, matches
+from .query import EventView, Node, matches
 from .terms import terms_of
 
 log = logging.getLogger(__name__)
@@ -110,6 +110,9 @@ class SearchStats:
     events_read: int = 0  # rows parsed from segment files, plus memtable
     # events looked at
     candidates: int = 0  # rows the index matched within the time range
+    # Events tested against the query itself, because the index could not
+    # decide alone (phrases, NOT around a phrase); every event, in a scan.
+    checked: int = 0
 
 
 def partition_of(time: int) -> str:
@@ -503,7 +506,7 @@ class Store:
 
     def search(
         self,
-        query: list[Term] | None = None,
+        query: Node | None = None,
         start: int = MIN_TIME,
         end: int = MAX_TIME,
         limit: int = 100,
@@ -511,17 +514,16 @@ class Store:
         *,
         use_index: bool = True,
     ) -> tuple[list[Event], SearchStats]:
-        """The newest ``limit`` events matching ``query`` with
-        ``start <= time < end``, newest first; ``before`` is a (time, id) to
-        continue below (pagination)."""
-        query = query or []
+        """The newest ``limit`` events matching ``query`` (None: every event)
+        with ``start <= time < end``, newest first; ``before`` is a (time, id)
+        to continue below (pagination)."""
         if use_index:
             return self._search_indexed(query, start, end, limit, before)
         return self._search_scan(query, start, end, limit, before)
 
     def _search_indexed(
         self,
-        query: list[Term],
+        query: Node | None,
         start: int,
         end: int,
         limit: int,
@@ -529,21 +531,23 @@ class Store:
     ) -> tuple[list[Event], SearchStats]:
         with self._lock:
             segments = list(self._segments)
-            # The memtable keeps growing; take its matches now, under the lock.
-            in_memory = []
+            # The memtable keeps growing; take its candidates now, under the
+            # lock.
+            in_memory: list[tuple[Event, bool]] = []
             for memory in (self._frozen, self._memtable):
-                rows = index.candidate_rows(memory.lookup, query)
+                rows, exact = index.evaluate(query, memory)
                 found = range(len(memory)) if rows is None else rows
-                in_memory += [memory.events[row] for row in found]
+                in_memory += [(memory.events[row], exact) for row in found]
         stats = SearchStats(segments_total=len(segments))
         top = _Top(limit)
-        for event in in_memory:
+        for event, exact in in_memory:
             stats.events_read += 1
             key = (event.time, event.id)
             if (
                 start <= event.time < end
                 and (before is None or key < before)
                 and top.wants(key)
+                and (exact or self._check(query, event, stats))
             ):
                 top.add(key, event)
 
@@ -568,7 +572,7 @@ class Store:
     def _search_segment(
         self,
         segment: Segment,
-        query: list[Term],
+        query: Node | None,
         start: int,
         end: int,
         before: tuple[int, int] | None,
@@ -583,7 +587,7 @@ class Store:
         high = bisect_left(keys, (end, 0))
         if before is not None:
             high = min(high, bisect_left(keys, before))
-        rows = index.candidate_rows(segment_index.lookup, query)
+        rows, exact = index.evaluate(query, segment_index)
         newest_first: Sequence[int]
         if rows is None:
             newest_first = range(high - 1, low - 1, -1)
@@ -602,8 +606,14 @@ class Store:
                 key = keys[row]
                 if top.full_above(key):
                     break  # every row after this one is older still
-                if top.wants(key):
-                    top.add(key, read(row))
+                event = read(row)
+                if exact or self._check(query, event, stats):
+                    top.add(key, event)
+
+    @staticmethod
+    def _check(query: Node | None, event: Event, stats: SearchStats) -> bool:
+        stats.checked += 1
+        return matches(query, EventView(event.data))
 
     def _index(self, segment: Segment) -> index.SegmentIndex:
         with self._indexes_lock:
@@ -622,7 +632,7 @@ class Store:
 
     def _search_scan(
         self,
-        query: list[Term],
+        query: Node | None,
         start: int,
         end: int,
         limit: int,
@@ -646,7 +656,7 @@ class Store:
                 if (
                     start <= event.time < end
                     and (before is None or (event.time, event.id) < before)
-                    and matches(terms_of(event.data), query)
+                    and self._check(query, event, stats)
                 ):
                     yield event
 

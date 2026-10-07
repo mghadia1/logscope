@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from logscope.events import ParsedLine, parse_time
@@ -41,6 +41,8 @@ def make_line(rng: random.Random, time: int) -> ParsedLine:
     }
     if rng.random() < 0.7:
         data["status"] = rng.choice(STATUSES)
+    if rng.random() < 0.5:
+        data["attempt"] = rng.choice([0, 1, 2, 3, "2", 2.5])  # "2": a number too
     if rng.random() < 0.3:
         data["http"] = {
             "method": rng.choice(["GET", "post"]),
@@ -68,33 +70,70 @@ def store(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Store]:
     store.abandon()
 
 
-queries = st.lists(
-    st.sampled_from(
-        [
-            "level:info",
-            "level:error",
-            "level:warn",
-            "service:gatekeeper",
-            "status:200",
-            "status:503",
-            "status:503.0",
-            "status:2e2",
-            "status:null",
-            "http.method:get",
-            "http.tags:a",
-            "upstream",
-            "timeout",
-            "abc-123",
-            "café",
-            "missing",
-        ]
+TERMS = [
+    "level:info",
+    "level:error",
+    "level:warn",
+    "service:gatekeeper",
+    "status:200",
+    "status:503",
+    "status:503.0",
+    "status:2e2",
+    "status:null",
+    "status:*",
+    "status>=500",
+    "status<404",
+    "status<=200",
+    "attempt>1",
+    "attempt<=0",
+    "http:*",
+    "http.method:get",
+    "http.tags:a",
+    "upstream",
+    "timeout",
+    "abc-123",  # a phrase: abc then 123
+    "café",
+    "missing",
+    '"upstream timeout"',  # sometimes adjacent, sometimes not, or reversed
+    '"timeout upstream"',
+    '"job done retry"',
+]
+PHRASES = ['"upstream timeout"', '"timeout upstream"', '"job done retry"', "abc-123"]
+# Random trees of AND, OR, NOT and parentheses over those terms: whatever
+# the shape, the index (with the check of inexact candidates) must agree
+# with the scan.
+queries = st.one_of(
+    st.just(""),
+    st.recursive(
+        # Phrases are half the terms: they are the inexact case, where the
+        # index's candidates must be checked against the events.
+        st.one_of(st.sampled_from(TERMS), st.sampled_from(PHRASES)),
+        lambda inner: st.one_of(
+            st.lists(inner, min_size=2, max_size=3).map(lambda qs: f"({' '.join(qs)})"),
+            st.lists(inner, min_size=2, max_size=3).map(
+                lambda qs: f"({' OR '.join(qs)})"
+            ),
+            inner.map(lambda q: f"NOT {q}"),
+        ),
+        max_leaves=5,
     ),
-    max_size=3,
-).map(" ".join)
+)
 boundaries = st.sampled_from([T0 + k * 15 * 60 * SECOND for k in range(-1, 26)])
 
 
-@settings(max_examples=400, deadline=None)
+# Shapes where an inexact part (NOT around a phrase) sits inside OR, AND or
+# another NOT, every time, whatever Hypothesis happens to generate.
+INEXACT_SHAPES = [
+    'NOT "upstream timeout" OR level:info',
+    'level:info OR NOT "upstream timeout"',
+    '(NOT abc-123) OR (NOT "timeout upstream")',
+    'NOT (NOT "upstream timeout")',
+    '"upstream timeout" OR NOT status:*',
+    'level:error (NOT "job done retry" OR http:*)',
+]
+
+
+@settings(max_examples=600, deadline=None)
 @given(
     text=queries,
     start=boundaries,
@@ -102,6 +141,12 @@ boundaries = st.sampled_from([T0 + k * 15 * 60 * SECOND for k in range(-1, 26)])
     limit=st.integers(1, 60),
     cursor_pick=st.one_of(st.none(), st.integers(0, 10_000)),
 )
+@example(text=INEXACT_SHAPES[0], start=T0, span=26, limit=60, cursor_pick=None)
+@example(text=INEXACT_SHAPES[1], start=T0, span=26, limit=60, cursor_pick=None)
+@example(text=INEXACT_SHAPES[2], start=T0, span=26, limit=60, cursor_pick=None)
+@example(text=INEXACT_SHAPES[3], start=T0, span=26, limit=60, cursor_pick=None)
+@example(text=INEXACT_SHAPES[4], start=T0, span=26, limit=60, cursor_pick=None)
+@example(text=INEXACT_SHAPES[5], start=T0, span=26, limit=60, cursor_pick=None)
 def test_the_index_returns_exactly_what_the_scan_returns(
     store: Store, text: str, start: int, span: int, limit: int, cursor_pick: int | None
 ) -> None:

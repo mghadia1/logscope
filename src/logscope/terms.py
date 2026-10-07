@@ -1,17 +1,21 @@
-"""The terms an event is indexed under. The index and the full scan both
-decide matches with ``terms_of``, so they cannot disagree about what an
-event contains; only the index's own machinery (writing, lookup,
-intersecting) can be wrong, and the tests compare it with the scan.
+"""What an event is indexed under. The index and the full scan both decide
+matches from ``terms_of`` (and, for phrases, ``word_lists``), so they cannot
+disagree about what an event contains; only the index's own machinery
+(writing, lookup, combining) can be wrong, and the tests compare it with
+the scan.
 
-Two kinds of term:
+Three kinds of term:
 
 - **Field terms**, ``f\\0path\\0value``: a field's exact value. Nested objects
   are flattened to dotted paths (``http.method``) and array elements are
   indexed under the array's path. Strings are lowercased, so ``level:info``
-  matches "INFO"; numbers are written canonically, so ``status:200``
-  matches 200, 200.0 and "200".
-- **Text terms**, ``t\\0token``: every word (``\\w+``, lowercased) of every
+  matches "INFO"; numbers are written canonically, and a string that is a
+  number also gets its number's key, so ``status:200`` matches 200, 200.0,
+  "200" and "200.0". Numeric ranges read these too.
+- **Word terms**, ``t\\0word``: every word (``\\w+``, lowercased) of every
   string and number, in any field, so a bare word matches anywhere.
+- **Exists terms**, ``e\\0path``: the field is present, for ``field:*``; also
+  for every enclosing object (``http`` for ``http.method``).
 
 The timestamp fields are left out: the time range already covers them, and
 indexing one unique value per event would only bloat the dictionary.
@@ -30,7 +34,7 @@ MAX_KEYWORD = 256
 MAX_TOKEN = 64
 
 _WORD = re.compile(r"\w+")
-# JSON's number syntax: what makes a query value numeric.
+# JSON's number syntax: what makes a value numeric.
 _NUMBER = re.compile(r"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?")
 
 
@@ -38,8 +42,17 @@ def field_key(path: str, value: str) -> str:
     return f"f\0{path}\0{value}"
 
 
-def text_key(token: str) -> str:
-    return f"t\0{token}"
+def field_prefix(path: str) -> str:
+    """The start of every field key of ``path``; ranges scan these."""
+    return f"f\0{path}\0"
+
+
+def word_key(word: str) -> str:
+    return f"t\0{word}"
+
+
+def exists_key(path: str) -> str:
+    return f"e\0{path}"
 
 
 def tokens(text: str) -> list[str]:
@@ -53,16 +66,23 @@ def canonical_number(value: int | float) -> str:
     return repr(value) if isinstance(value, float) else str(value)
 
 
+def parse_number(text: str) -> int | float | None:
+    """``text`` as a number if it is one in JSON's syntax, else None."""
+    if not _NUMBER.fullmatch(text):
+        return None
+    try:
+        return int(text) if text.lstrip("-").isdigit() else float(text)
+    except ValueError:  # an int over Python's 4,300-digit limit
+        return None
+
+
 def query_values(raw: str) -> set[str]:
     """The indexed values a query value can match: itself, lowercased, and
     its canonical number if it is a JSON number ("7.0" matches "7.0" and 7;
     "007" is not a JSON number, so it matches only the string)."""
     values = {raw.lower()}
-    if _NUMBER.fullmatch(raw):
-        try:
-            number = int(raw) if raw.lstrip("-").isdigit() else float(raw)
-        except ValueError:  # an int over Python's 4,300-digit limit
-            return values
+    number = parse_number(raw)
+    if number is not None:
         values.add(canonical_number(number))
     return values
 
@@ -70,19 +90,41 @@ def query_values(raw: str) -> set[str]:
 def terms_of(event: dict[str, Any]) -> set[str]:
     terms: set[str] = set()
     for path, value in _leaves(event):
+        terms.add(exists_key(path))
+        dot = path.rfind(".")
+        while dot != -1:  # every enclosing object exists too
+            terms.add(exists_key(path[:dot]))
+            dot = path.rfind(".", 0, dot)
         if isinstance(value, str):
             if len(value) <= MAX_KEYWORD:
                 terms.add(field_key(path, value.lower()))
-            terms.update(text_key(token) for token in tokens(value))
+                # A string that is a number matches by value too, as it does
+                # in a range: status:503 finds "503.0" as status>=503 does.
+                number = parse_number(value)
+                if number is not None:
+                    terms.add(field_key(path, canonical_number(number)))
+            terms.update(word_key(token) for token in tokens(value))
         elif isinstance(value, bool):
             terms.add(field_key(path, "true" if value else "false"))
         elif value is None:
             terms.add(field_key(path, "null"))
         elif isinstance(value, int | float):
-            number = canonical_number(value)
-            terms.add(field_key(path, number))
-            terms.update(text_key(token) for token in tokens(number))
+            spelled = canonical_number(value)
+            terms.add(field_key(path, spelled))
+            terms.update(word_key(token) for token in tokens(spelled))
     return terms
+
+
+def word_lists(event: dict[str, Any]) -> list[list[str]]:
+    """The words of each string and number value, in order: a phrase must
+    appear, consecutively, within one of them."""
+    lists = []
+    for _, value in _leaves(event):
+        if isinstance(value, str):
+            lists.append(tokens(value))
+        elif isinstance(value, int | float) and not isinstance(value, bool):
+            lists.append(tokens(canonical_number(value)))
+    return lists
 
 
 def _leaves(event: dict[str, Any]) -> Iterator[tuple[str, object]]:

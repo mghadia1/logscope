@@ -1,7 +1,12 @@
-import pytest
-
-from logscope.query import FieldTerm, QueryError, TextTerm, matches, parse
-from logscope.terms import MAX_TOKEN, field_key, query_values, terms_of, text_key
+from logscope.terms import (
+    MAX_TOKEN,
+    exists_key,
+    field_key,
+    query_values,
+    terms_of,
+    word_key,
+    word_lists,
+)
 
 
 def test_field_values_are_lowercased_and_numbers_canonical() -> None:
@@ -31,20 +36,20 @@ def test_words_of_every_string_and_number_are_text_terms() -> None:
         {"msg": "Upstream timeout after 5s", "job_id": "abc-123", "status": 504}
     )
     for word in ["upstream", "timeout", "after", "5s", "abc", "123", "504"]:
-        assert text_key(word) in terms
+        assert word_key(word) in terms
 
 
 def test_timestamp_fields_are_not_indexed() -> None:
     terms = terms_of({"time": "2026-10-06T21:00:00Z", "ts": 1, "msg": "hi"})
-    assert terms == {field_key("msg", "hi"), text_key("hi")}
+    assert terms == {field_key("msg", "hi"), word_key("hi"), exists_key("msg")}
 
 
 def test_long_strings_are_words_only_and_long_words_are_cut() -> None:
     long_value = "word " * 100
     terms = terms_of({"msg": long_value, "blob": "x" * 100})
     assert not any(t.startswith("f\0msg\0") for t in terms)
-    assert text_key("word") in terms
-    assert text_key("x" * MAX_TOKEN) in terms
+    assert word_key("word") in terms
+    assert word_key("x" * MAX_TOKEN) in terms
 
 
 def test_query_values_match_a_string_and_its_number() -> None:
@@ -55,33 +60,25 @@ def test_query_values_match_a_string_and_its_number() -> None:
     assert query_values("1" * 5000) == {"1" * 5000}  # too long for int(); no crash
 
 
-def test_parse_simple_query() -> None:
-    terms = parse("level:ERROR  timeout abc-123")
-    assert terms == [
-        FieldTerm("level", frozenset({field_key("level", "error")})),
-        TextTerm(frozenset({text_key("timeout")})),
-        TextTerm(frozenset({text_key("abc"), text_key("123")})),
-    ]
-    assert parse("") == []
+def test_a_field_and_every_enclosing_object_exist() -> None:
+    terms = terms_of({"http": {"req": {"method": "GET"}}, "tags": [], "user": None})
+    assert {
+        exists_key("http"),
+        exists_key("http.req"),
+        exists_key("http.req.method"),
+    } <= terms
+    assert exists_key("user") in terms  # null is present
+    assert exists_key("tags") not in terms  # an empty array holds nothing
 
 
-@pytest.mark.parametrize(
-    ("text", "message"),
-    [
-        ("level:", "expected field:value"),
-        (":error", "expected field:value"),
-        ("---", "no letters or digits"),
-        ("msg:" + "x" * 300, "not indexed exactly"),
-    ],
-)
-def test_bad_queries_say_why(text: str, message: str) -> None:
-    with pytest.raises(QueryError, match=message):
-        parse(text)
+def test_word_lists_keep_each_value_s_words_in_order() -> None:
+    lists = word_lists({"msg": "Upstream timeout", "status": 504, "ok": True})
+    assert sorted(lists) == [["504"], ["upstream", "timeout"]]
 
 
-def test_matches_needs_every_term_and_any_value_of_a_field_term() -> None:
-    event = terms_of({"level": "ERROR", "status": "503", "msg": "upstream timeout"})
-    assert matches(event, parse("level:error status:503 timeout"))
-    assert matches(event, parse("status:503.0"))  # "503" the string, as a number
-    assert not matches(event, parse("level:error status:500"))
-    assert not matches(event, parse("upstream refused"))
+def test_a_string_that_is_a_number_also_gets_the_number_s_key() -> None:
+    terms = terms_of({"status": "503.0", "code": "007"})
+    assert {field_key("status", "503.0"), field_key("status", "503")} <= terms
+    assert not any(
+        t.startswith("f\0code\0") and t != field_key("code", "007") for t in terms
+    )
