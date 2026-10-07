@@ -7,6 +7,10 @@ services:
     volumes:
       - logscope-data:/data
     restart: unless-stopped
+    # Time to finish shutting down (end live tails, flush the memtable)
+    # before Docker kills the process. Set explicitly: on the machine this
+    # was built on, `docker compose stop` killed it after about a second.
+    stop_grace_period: 15s
 
 volumes:
   logscope-data:

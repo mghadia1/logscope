@@ -147,6 +147,7 @@ class MemIndex:
 
     def __init__(self) -> None:
         self.events: list[Event] = []
+        self.times: array[int] = array("Q")  # each row's time, as a segment has
         self._postings: dict[str, array[int]] = {}
 
     def __len__(self) -> int:
@@ -159,6 +160,7 @@ class MemIndex:
     def add(self, event: Event, terms: Iterable[str]) -> None:
         row = len(self.events)
         self.events.append(event)
+        self.times.append(event.time)
         for term in terms:
             postings = self._postings.get(term)
             if postings is None:
@@ -179,6 +181,9 @@ class Source(Protocol):
 
     @property
     def rows(self) -> int: ...
+
+    @property
+    def times(self) -> Sequence[int]: ...
 
     def lookup(self, key: str) -> Sequence[int]: ...
 

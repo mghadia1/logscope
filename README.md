@@ -9,10 +9,11 @@ logs of two earlier projects, SurgiServe and Gatekeeper.
 It deliberately does not use Elasticsearch, OpenSearch, Loki, ClickHouse or
 SQLite's full-text search: the point is to build the parts they provide.
 
-> **Status:** Milestones 0-3 of 7. Events can be ingested, survive crashes,
-> and be searched with a small query language (fields, words, phrases,
-> numeric ranges, AND/OR/NOT) through an inverted index. There are no
-> aggregations or live tail yet (Milestone 4), and the UI is still a shell.
+> **Status:** Milestones 0-4 of 7. Events can be ingested, survive crashes,
+> and be searched with a small query language through an inverted index;
+> counted over time, by value and as numbers; and followed live. Old data
+> expires and small segments are merged. The UI is still a shell
+> (Milestone 5), and nothing has been measured yet (Milestone 6).
 
 ## Status
 
@@ -22,7 +23,7 @@ SQLite's full-text search: the point is to build the parts they provide.
 | 1 | Ingestion and storage: `POST /api/ingest`, append-only write-ahead log with crash recovery, time-partitioned segments, search by time range by scanning | Done |
 | 2 | Inverted index per segment; segment time bounds to skip segments; indexed results checked against the scan | Done |
 | 3 | Query language (`level:error service:gatekeeper status>=500 "upstream timeout" NOT route:/healthz`), positioned errors; property test: index equals scan | Done |
-| 4 | Aggregations, live tail over Server-Sent Events, retention, merging small segments | Not started |
+| 4 | Aggregations, live tail over Server-Sent Events, retention, merging small segments | Done |
 | 5 | React UI: query box, results, histogram, field sidebar, live tail | Not started |
 | 6 | Real logs (SurgiServe, Gatekeeper) through a shipper; measured ingest rate and query latency, index vs scan | Not started |
 | 7 | Architecture diagram, design decisions, failures found, benchmarks | Not started |
@@ -98,8 +99,37 @@ capitals: "not" is a word. Nested fields use dots (`http.method`); an
 array's elements count as the array's field. The timestamp fields are
 searched with `start` and `end`, not in `q`.
 
-**`GET /api/stats`**: events in memory and in segments, WAL files, whether
-writes are accepted.
+### Aggregations
+
+All three take `q`, `start` and `end` like a search, count every matching
+event (not a page), and say what they read.
+
+**`GET /api/aggregate/histogram?interval=`**: matching events per time
+bucket (`30s`, `5m`, `1h`, `1d`; by default the smallest of a list of round
+widths giving at most about 60 buckets, over the stored range when `start`
+and `end` are left out; at most 2,000 buckets).
+
+**`GET /api/aggregate/terms?field=&size=`**: a field's most frequent values
+among the matching events, with how many matched and how many had the
+field. Values group the way queries match them, so the count shown for
+`503` is exactly what `status:503` finds (503, 503.0 and "503" are one
+value; "ERROR" and "error" are one).
+
+**`GET /api/aggregate/numeric?field=`**: count, min, max, mean and the 50th,
+90th, 95th and 99th percentiles (nearest rank, exact) of a field's numbers,
+including numeric strings.
+
+### Live tail
+
+**`GET /api/tail?q=`**: Server-Sent Events: each newly stored event that
+matches `q`, as `event: event` with its id, time and body, in the order they
+arrive (not by time). Nothing stored before the connection is replayed. A
+comment every 15 s keeps an idle connection open. A client that cannot keep
+up gets `event: dropped` with how many events it missed, rather than the
+server buffering without limit; when the server shuts down, `event: end`.
+
+**`GET /api/stats`**: events in memory and in segments, WAL files, files
+waiting to be deleted, the retention period, whether writes are accepted.
 
 **`GET /api/health`**: liveness only.
 
@@ -142,6 +172,30 @@ POST /api/ingest
   unwritten pages and cleared the error, so a retry could "succeed" without
   the data on disk (PostgreSQL's "fsyncgate"). The partial record is cut
   off, and ingest answers 503 until a restart.
+
+### Merging, retention, and when files are deleted
+
+Every 30 seconds, in the background:
+
+- **Retention** (`LOGSCOPE_RETENTION_HOURS`, off by default) drops segments
+  whose events are all older than the period. Ingest refuses events already
+  past it, rather than storing what the next pass would delete.
+- **Merging**: an hour with 8 or more segments (a flush every minute makes
+  60 an hour) is merged into one: a k-way merge of the already sorted
+  segments, the lines copied as they are, and a new index. Each merge of a
+  busy hour rewrites what that hour holds so far; a size-tiered policy would
+  write less, at the cost of more segments to search.
+- Both commit by writing a new manifest, like a flush. **The old files are
+  deleted only when no running search can still need them.** Every
+  manifest change is a new version; a search records the version it
+  started from; a file dropped at version *v* is deleted once every running
+  search started at *v* or later. Deleting at once would break a search
+  already part-way through: skipping a merged-away file would silently miss
+  its events, which now live in a segment that search never saw.
+- **New segment files are numbered** (`00000012-<first id>-<last id>`), and
+  numbers are never reused. Two merges of one hour can cover the same ids;
+  named by ids alone, the second would overwrite a file the manifest still
+  lists.
 
 ## How search works
 
@@ -200,6 +254,25 @@ segments, newest first ──► outside the time range? skip
   160 kills (40 seeds) lost and duplicated nothing.
 - The smoke test SIGKILLs the container itself and checks that an event
   held only in the WAL comes back.
+- **The SIGKILL test merges too:** the killed process merges any hour with
+  two segments, continuously, so kills land mid-merge; the test fails if no
+  merge finished, so it cannot quietly stop testing them. A one-off run of
+  80 more kills (20 seeds) with merging lost and duplicated nothing.
+- Crashes before and after a merge's manifest; two merges of one hour; a
+  merge in the middle of an aggregation, whose old files must stay readable
+  until it finishes and be deleted after; retention's exact cutoff.
+- **Aggregations against the scan:** for random queries and time ranges,
+  every histogram bucket holds exactly the events the scan finds in it;
+  every top value's count is exactly what searching for that value finds;
+  numeric stats equal those of the scanned events. Six planted bugs (a
+  bucket edge, an off-by-one in counting, values not grouped by number,
+  events outside the time range, unchecked phrase candidates, every
+  spelling of a number counted) each make them fail.
+- **The live tail against a real server** (uvicorn in a thread): new
+  matching events arrive and others do not; keep-alives; a client hanging
+  up is unsubscribed; a SIGTERM ends open tails at once and the memtable is
+  still flushed; and, to show why that matters, with uvicorn's default an
+  open tail keeps the server running after it was asked to stop.
 - **The index against the scan:** Hypothesis generates 600 combinations of
   a random query tree (AND, OR, NOT, phrases, ranges, fields that exist),
   time range, limit and cursor over a store whose segments overlap in time
@@ -241,12 +314,17 @@ make dev-ui    # UI on :5173, forwarding /api to :8000
 | `src/logscope/terms.py` | What an event is indexed under (`terms_of`) |
 | `src/logscope/query.py` | The query language: lexer, parser, positioned errors; matching one event |
 | `src/logscope/index.py` | Segment index files (build, memory-mapped lookup); the in-memory index; evaluating a query to candidates |
+| `src/logscope/aggregate.py` | Histogram, top values and numeric stats, from the index |
+| `src/logscope/serve.py` | Running uvicorn, ending live tails as soon as a shutdown signal arrives |
 | `src/logscope/settings.py` | Configuration from `LOGSCOPE_*` environment variables |
 | `ui/` | The React UI (JavaScript, Vite) |
 | `scripts/smoke.sh` | Checks a running stack over HTTP, including a SIGKILL |
 | `tests/test_crash.py` | The SIGKILL test |
 | `tests/test_search.py` | The index against the scan (Hypothesis) |
 | `tests/test_query.py` | The parser, its errors, and matching |
+| `tests/test_aggregate.py` | Aggregations against the scan (Hypothesis) |
+| `tests/test_maintenance.py` | Merging, retention, deferred deletion |
+| `tests/test_tail.py` | The live tail against a real uvicorn server |
 
 ## Decisions so far
 
@@ -273,6 +351,16 @@ make dev-ui    # UI on :5173, forwarding /api to :8000
 - **`status:>=500` is an error, not a search.** Other tools write ranges that
   way; here it would silently be an exact match on the text ">=500", so the
   error says to drop the colon.
+- **Aggregations read the index, not the events.** A histogram with no
+  query counts each bucket of a segment by two binary searches over its
+  sorted times; top values intersect the field's postings with the
+  matching rows. A number's canonical key ("503") holds every row with that
+  number, however it was written, so a value's count is one postings list,
+  not a union. (A union was there first; a planted bug showed it changed
+  nothing, and why.)
+- **A live tail matches each event in the event loop.** Fine for a few
+  clients; many clients at a high ingest rate would want that work moved
+  off the loop.
 - **The answer shows the parsed query,** with its grouping explicit, so
   `a OR b c` meaning `a OR (b c)` is never a surprise.
 - **JavaScript, not TypeScript, for the UI:** TypeScript is not yet a
@@ -308,3 +396,16 @@ make dev-ui    # UI on :5173, forwarding /api to :8000
    strings that are numbers as numbers; exact matches compared spellings.
    A test of one event against both caught it; a string that is a number
    now also gets its number's index key, so the two agree.
+6. **`docker compose stop` killed LogScope before it could flush.** With a
+   live tail open, a clean restart lost the shutdown flush (the events came
+   back only by WAL replay). Two causes, both found by the smoke test: a
+   tail never ends, and uvicorn waits for open responses before running
+   the app's shutdown; and on this machine (Docker Desktop, Compose v5.0.2)
+   `docker compose stop` sent SIGKILL after about a second, not Docker's
+   usual ten (exit 137, checked by hand). Now a SIGTERM ends open tails at
+   once, uvicorn cuts off anything else after 5 s, and `compose.yaml` sets
+   `stop_grace_period: 15s` rather than relying on a default.
+7. **The SIGKILL test had stopped testing merges.** It ran with merging on,
+   but each run was killed after a tenth of a second, before any merge
+   finished, and it passed anyway. A new check that merges really happened
+   failed at once; with a lower threshold and longer runs, they do.

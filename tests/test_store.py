@@ -246,7 +246,7 @@ def test_flush_on_close_then_nothing_to_replay(tmp_path: Path) -> None:
 def test_the_flusher_flushes_when_the_memtable_is_full(tmp_path: Path) -> None:
     store = Store(tmp_path, flush_events=3, flush_interval=3600)
     store.open()
-    store.start_flusher(period=0.01)
+    store.start_background(period=0.01)
     try:
         store.append(lines(T0, T0 + 1, T0 + 2))
         for _ in range(500):

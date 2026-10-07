@@ -22,8 +22,15 @@ class BadLine:
 
 
 def parse_batch(
-    body: bytes, received: int, *, max_events: int, max_line_bytes: int
+    body: bytes,
+    received: int,
+    *,
+    max_events: int,
+    max_line_bytes: int,
+    oldest: int | None = None,
 ) -> tuple[list[ParsedLine], list[BadLine]]:
+    """``oldest``: events before this time (the retention cutoff) are
+    rejected; storing them would only have them deleted at the next pass."""
     parsed: list[ParsedLine] = []
     bad: list[BadLine] = []
     for number, raw in enumerate(body.split(b"\n"), start=1):
@@ -37,7 +44,12 @@ def parse_batch(
             )
             continue
         try:
-            parsed.append(parse_line(raw, received))
+            line = parse_line(raw, received)
         except LineError as error:
             bad.append(BadLine(number, str(error)))
+            continue
+        if oldest is not None and line.time < oldest:
+            bad.append(BadLine(number, "older than the retention period"))
+            continue
+        parsed.append(line)
     return parsed, bad

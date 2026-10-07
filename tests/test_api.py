@@ -1,5 +1,6 @@
 import os
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -276,3 +277,91 @@ def test_search_stats_show_what_the_index_saved(api: TestClient) -> None:
     assert (scanned["events_read"], scanned["checked"]) == (3, 3)
     phrase = api.get("/api/search", params={"q": '"upstream timeout"'}).json()
     assert phrase["stats"]["checked"] == 1  # the one candidate, checked
+
+
+def test_histogram_over_http(api: TestClient) -> None:
+    api.post("/api/ingest", content=GATEKEEPER_AND_SURGISERVE)
+    body = api.get(
+        "/api/aggregate/histogram",
+        params={
+            "q": "level:error",
+            "start": "2026-10-06T21:00:00Z",
+            "end": "2026-10-06T21:00:03Z",
+            "interval": "1s",
+        },
+    ).json()
+    assert body["interval_seconds"] == 1
+    assert body["total"] == 2
+    assert body["buckets"] == [
+        {"start": "2026-10-06T21:00:00.000000Z", "count": 0},
+        {"start": "2026-10-06T21:00:01.000000Z", "count": 1},
+        {"start": "2026-10-06T21:00:02.000000Z", "count": 1},
+    ]
+
+
+def test_histogram_defaults_to_the_stored_range(api: TestClient) -> None:
+    api.post("/api/ingest", content=GATEKEEPER_AND_SURGISERVE)
+    body = api.get("/api/aggregate/histogram").json()
+    assert body["total"] == 3
+    assert body["interval_seconds"] == 1  # 2 s of events: the smallest step
+
+
+def test_top_values_over_http(api: TestClient) -> None:
+    api.post("/api/ingest", content=GATEKEEPER_AND_SURGISERVE)
+    body = api.get("/api/aggregate/terms", params={"field": "level"}).json()
+    assert body["values"] == [
+        {"value": "error", "count": 2},  # "ERROR" and "error": one value
+        {"value": "info", "count": 1},
+    ]
+    assert (body["matched"], body["with_field"], body["distinct"]) == (3, 3, 2)
+
+
+def test_numeric_stats_over_http(api: TestClient) -> None:
+    api.post("/api/ingest", content=GATEKEEPER_AND_SURGISERVE)
+    body = api.get(
+        "/api/aggregate/numeric", params={"field": "status", "q": "service:gatekeeper"}
+    ).json()
+    assert (body["count"], body["min"], body["max"], body["mean"]) == (2, 200, 504, 352)
+    assert body["percentiles"] == {"p50": 200, "p90": 504, "p95": 504, "p99": 504}
+
+
+@pytest.mark.parametrize(
+    ("path", "params", "detail"),
+    [
+        ("histogram", {"interval": "5x"}, "not an interval"),
+        ("histogram", {"interval": "0s"}, "not an interval"),
+        (
+            "histogram",
+            {
+                "interval": "1s",
+                "start": "2026-10-06T00:00:00Z",
+                "end": "2026-10-07T00:00:00Z",
+            },
+            "at most 2000",
+        ),
+        ("terms", {"field": "time"}, "the event's time"),
+        ("numeric", {"field": "ts"}, "the event's time"),
+    ],
+)
+def test_bad_aggregation_requests_are_422(
+    api: TestClient, path: str, params: dict[str, str], detail: str
+) -> None:
+    response = api.get(f"/api/aggregate/{path}", params=params)
+    assert response.status_code == 422
+    assert detail in str(response.json()["detail"])
+
+
+def test_events_older_than_the_retention_period_are_refused(tmp_path: Path) -> None:
+    with TestClient(create_app(settings(tmp_path, retention_hours=1))) as api:
+        recent = datetime.now(UTC).isoformat()
+        result = api.post(
+            "/api/ingest",
+            content=ndjson(
+                f'{{"time": "{recent}", "msg": "kept"}}',
+                '{"time": "2020-01-01T00:00:00Z", "msg": "too old"}',
+            ),
+        ).json()
+        assert (result["accepted"], result["rejected"]) == (1, 1)
+        assert result["errors"] == [
+            {"line": 2, "error": "older than the retention period"}
+        ]
