@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Checks a running Compose stack from outside, over real HTTP: the health
-# endpoint, the built UI and its bundle, JSON 404s, 405s with Allow, and
-# that the container runs unprivileged with a writable data volume.
+# endpoint, the built UI and its bundle, JSON 404s, 405s with Allow, that
+# the container runs unprivileged with a writable data volume, and that
+# ingested events are searchable and survive both a clean restart and a
+# SIGKILL of the container.
 set -euo pipefail
 base_url="${BASE_URL:-http://localhost:8200}"
 
@@ -37,5 +39,42 @@ expect "wrong method Allow" "$(header allow -X POST "$base_url/api/health")" "GE
 expect "runs as uid" "$(docker compose exec -T logscope id -u)" "10001"
 expect "data volume writable" "$(docker compose exec -T logscope sh -c 'touch /data/.probe && rm /data/.probe && echo yes')" "yes"
 expect "container health" "$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose ps -q logscope)")" "healthy"
+
+# Milestone 1: ingest, search, restart, SIGKILL.
+ingest() { curl --fail --silent --show-error -X POST --data-binary @- "$base_url/api/ingest"; }
+search() { curl --fail --silent --show-error "$base_url/api/search?start=2026-10-06T00:00:00Z&end=2026-10-07T00:00:00Z"; }
+messages() { python3 -c 'import json, sys; print(" ".join(e["event"]["msg"] for e in json.load(sys.stdin)["events"]))'; }
+stat() { field "$(curl --fail --silent --show-error "$base_url/api/stats")" "$1"; }
+wait_healthy() {
+  for _ in $(seq 60); do
+    [ "$(status "$base_url/api/health")" = 200 ] && return 0
+    sleep 0.5
+  done
+  echo "FAIL the API did not come back" >&2; exit 1
+}
+
+result="$(ingest <<'NDJSON'
+{"time": "2026-10-06T21:00:00Z", "service": "smoke", "msg": "first"}
+not json
+{"time": "2026-10-06T21:00:01Z", "service": "smoke", "msg": "second"}
+NDJSON
+)"
+expect "ingest accepted" "$(field "$result" accepted)" "2"
+expect "ingest rejected" "$(field "$result" rejected)" "1"
+expect "rejected line number" "$(python3 -c 'import json, sys; print(json.loads(sys.argv[1])["errors"][0]["line"])' "$result")" "2"
+expect "search, newest first" "$(search | messages)" "second first"
+
+docker compose restart logscope >/dev/null 2>&1
+wait_healthy
+expect "after a clean restart" "$(search | messages)" "second first"
+expect "flushed to a segment on shutdown" "$(stat segment_events)" "2"
+
+ingest <<<'{"time": "2026-10-06T21:00:02Z", "msg": "third"}' >/dev/null
+expect "third event only in memory and the WAL" "$(stat events_in_memory)" "1"
+docker compose kill --signal SIGKILL logscope >/dev/null 2>&1
+docker compose up --detach --wait logscope >/dev/null 2>&1
+wait_healthy
+expect "after SIGKILL, replayed from the WAL" "$(search | messages)" "third second first"
+expect "replayed into memory, not a segment" "$(stat events_in_memory)" "1"
 
 echo "smoke test passed"

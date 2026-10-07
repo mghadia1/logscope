@@ -35,8 +35,11 @@ ui:
 check: lint typecheck test ui
 
 # Development: the API on :8000 and Vite on :5173 (which forwards /api).
+# --app-dir src rather than relying on the editable install: in an
+# iCloud-synced folder macOS marks everything inside .venv hidden, and
+# Python 3.13+ skips hidden .pth files, so `import logscope` would fail.
 dev-api:
-	$(BIN)/uvicorn logscope.app:app --reload
+	$(BIN)/uvicorn logscope.app:app --app-dir src --reload
 
 dev-ui:
 	cd ui && npm run dev
@@ -52,10 +55,15 @@ down:
 reset:
 	docker compose down --volumes
 
-# Bring the stack up, check it over HTTP from outside, tear it down.
-smoke: up
-	./scripts/smoke.sh
-	$(MAKE) down
+# Check a fresh stack over HTTP from outside. It runs as its own Compose
+# project, with its own volume and port, so it starts empty every time and
+# never touches the data of `make up`; its volume is deleted afterwards.
+SMOKE := COMPOSE_PROJECT_NAME=logscope-smoke LOGSCOPE_PORT=8201 BASE_URL=http://localhost:8201
+
+smoke:
+	$(SMOKE) docker compose up --build --detach --wait
+	$(SMOKE) ./scripts/smoke.sh || ($(SMOKE) docker compose logs; $(SMOKE) docker compose down --volumes; exit 1)
+	$(SMOKE) docker compose down --volumes
 
 clean:
 	rm -rf $(VENV) .pytest_cache .mypy_cache .ruff_cache build *.egg-info src/*.egg-info ui/node_modules ui/dist
