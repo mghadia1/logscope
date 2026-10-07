@@ -48,7 +48,7 @@ def test_appended_events_are_searchable_at_once(opened: Store) -> None:
     assert opened.append(lines(T0 + 2)) == (3, 3)
     events, stats = opened.search()
     assert [e.id for e in events] == [3, 2, 1]  # newest first
-    assert stats.events_scanned == 3
+    assert stats.events_read == 3
 
 
 def test_flush_writes_one_segment_per_hour_and_a_manifest(opened: Store) -> None:
@@ -75,7 +75,7 @@ def test_search_reads_segments_and_memory_together(opened: Store) -> None:
     opened.append(lines(T0 + 2))
     events, stats = opened.search()
     assert [e.id for e in events] == [3, 2, 1]
-    assert stats.segments_scanned == 1
+    assert stats.segments_read == 1
 
 
 def test_time_range_is_half_open_and_pagination_sees_every_event(opened: Store) -> None:
@@ -142,7 +142,7 @@ def test_a_crash_during_a_flush_loses_and_duplicates_nothing(
     monkeypatch.undo()
     fresh, recovery = reopen(opened)
     try:
-        assert len(recovery.orphans) == 2
+        assert len(recovery.orphans) == 4  # two segments, each data + index
         assert all(not (fresh.data_dir / o).exists() for o in recovery.orphans)
         assert recovery.replayed == 2
         assert all_ids(fresh) == [1, 2]
@@ -256,3 +256,26 @@ def test_the_flusher_flushes_when_the_memtable_is_full(tmp_path: Path) -> None:
         assert store.stats()["segment_events"] == 3
     finally:
         store.close()
+
+
+def test_events_being_flushed_stay_searchable(
+    opened: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Between the memtable being frozen and the manifest naming its
+    # segments, its events are in neither place; searches must still see
+    # them (from the frozen memtable), with and without the index.
+    opened.append(lines(T0, T0 + 1))
+    write_manifest = opened._write_manifest
+    seen: dict[str, list[int]] = {}
+
+    def search_mid_flush(segments: list[store_module.Segment], through: int) -> None:
+        opened.append(lines(T0 + 2))  # arrives mid-flush: the new memtable
+        for name, use_index in (("index", True), ("scan", False)):
+            events, _ = opened.search(limit=10, use_index=use_index)
+            seen[name] = sorted(e.id for e in events)
+        write_manifest(segments, through)
+
+    monkeypatch.setattr(opened, "_write_manifest", search_mid_flush)
+    opened.flush()
+    assert seen == {"index": [1, 2, 3], "scan": [1, 2, 3]}
+    assert opened.stats()["events_in_memory"] == 1  # 3 is still in memory

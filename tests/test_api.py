@@ -64,7 +64,7 @@ def test_search_returns_newest_first_with_iso_times(api: TestClient) -> None:
     assert [e["event"]["msg"] for e in body["events"]] == ["newer", "older"]
     assert body["events"][1]["time"] == "2026-10-06T21:00:00.000000Z"
     assert body["next_cursor"] is None
-    assert body["stats"]["events_scanned"] == 2
+    assert body["stats"]["events_read"] == 2
 
 
 def test_search_by_time_range_and_pages(api: TestClient) -> None:
@@ -192,3 +192,52 @@ def test_a_second_app_on_the_same_directory_does_not_start(api: TestClient) -> N
     with pytest.raises(StoreLocked):
         with TestClient(create_app(settings(data_dir))):
             pass
+
+
+GATEKEEPER_AND_SURGISERVE = ndjson(
+    # Shaped like the two earlier projects' logs: Go's slog, and SurgiServe's.
+    '{"time": "2026-10-06T21:00:00.123456789Z", "level": "INFO", "msg": "request",'
+    ' "service": "gatekeeper", "route": "GET /users/{id}", "status": 200}',
+    '{"time": "2026-10-06T21:00:01Z", "level": "ERROR", "msg": "upstream timeout",'
+    ' "service": "gatekeeper", "route": "GET /users/{id}", "status": 504}',
+    '{"ts": "2026-10-06T21:00:02.000+00:00", "level": "error", "service": "surgiserve",'
+    ' "event": "job failed", "job_id": "3f2a-77", "attempt": 2}',
+)
+
+
+@pytest.mark.parametrize("use_index", ["true", "false"])
+@pytest.mark.parametrize(
+    ("q", "expected"),
+    [
+        ("level:error", ["job failed", "upstream timeout"]),
+        ("service:gatekeeper status:504", ["upstream timeout"]),
+        ("timeout", ["upstream timeout"]),
+        ("3f2a-77", ["job failed"]),
+        ("route:GET", []),  # a field value is matched whole, not by word
+        ("", ["job failed", "upstream timeout", "request"]),
+    ],
+)
+def test_query_terms_filter_with_and_without_the_index(
+    api: TestClient, q: str, expected: list[str], use_index: str
+) -> None:
+    api.post("/api/ingest", content=GATEKEEPER_AND_SURGISERVE)
+    body = api.get("/api/search", params={"q": q, "index": use_index}).json()
+    found = [e["event"].get("msg") or e["event"]["event"] for e in body["events"]]
+    assert found == expected
+
+
+def test_a_bad_query_is_422_with_a_reason(api: TestClient) -> None:
+    response = api.get("/api/search", params={"q": "level:"})
+    assert response.status_code == 422
+    assert "expected field:value" in response.json()["detail"]
+
+
+def test_search_stats_show_what_the_index_saved(api: TestClient) -> None:
+    api.post("/api/ingest", content=GATEKEEPER_AND_SURGISERVE)
+    api.app.state.store.flush()  # type: ignore[attr-defined]
+    indexed = api.get("/api/search", params={"q": "timeout"}).json()["stats"]
+    scanned = api.get("/api/search", params={"q": "timeout", "index": "false"}).json()[
+        "stats"
+    ]
+    assert (indexed["events_read"], indexed["candidates"]) == (1, 1)
+    assert scanned["events_read"] == 3

@@ -23,6 +23,8 @@ from pydantic import BaseModel
 from . import __version__
 from .events import MAX_TIME, MIN_TIME, LineError, format_time, now, parse_time
 from .ingest import BatchTooLarge, parse_batch
+from .query import QueryError
+from .query import parse as parse_query
 from .settings import Settings
 from .store import Store, StoreUnavailable
 
@@ -57,8 +59,15 @@ class EventOut(BaseModel):
 
 
 class SearchStats(BaseModel):
-    segments_scanned: int
-    events_scanned: int
+    segments_total: int
+    # Opened: the index consulted (or, without the index, every row read).
+    segments_read: int
+    # Never opened: outside the time range, or older than everything found.
+    segments_skipped: int
+    # Events parsed from segment files, plus events looked at in memory.
+    events_read: int
+    # Rows the index matched within the time range (0 without the index).
+    candidates: int
     took_ms: float
 
 
@@ -144,12 +153,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/search")
     def search(
         request: Request,
+        q: str = "",
         start: str | None = None,
         end: str | None = None,
         limit: Annotated[int, Query(ge=1, le=1000)] = 100,
         cursor: str | None = None,
+        index: bool = True,
     ) -> SearchResult:
-        """Events with start <= time < end, newest first."""
+        """Events matching ``q`` with start <= time < end, newest first.
+        ``index=false`` scans every event instead (the baseline)."""
+        try:
+            terms = parse_query(q)
+        except QueryError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from None
         start_time = _query_time(start, "start", MIN_TIME)
         end_time = _query_time(end, "end", MAX_TIME)
         if start_time >= end_time:
@@ -157,7 +173,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         store: Store = request.app.state.store
         began = time.perf_counter()
         # One extra, to know whether there is a next page.
-        events, stats = store.search(start_time, end_time, limit + 1, _cursor(cursor))
+        events, stats = store.search(
+            terms, start_time, end_time, limit + 1, _cursor(cursor), use_index=index
+        )
         took = (time.perf_counter() - began) * 1000
         page = events[:limit]
         next_cursor = None
@@ -169,8 +187,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ],
             next_cursor=next_cursor,
             stats=SearchStats(
-                segments_scanned=stats.segments_scanned,
-                events_scanned=stats.events_scanned,
+                segments_total=stats.segments_total,
+                segments_read=stats.segments_read,
+                segments_skipped=stats.segments_skipped,
+                events_read=stats.events_read,
+                candidates=stats.candidates,
                 took_ms=round(took, 3),
             ),
         )

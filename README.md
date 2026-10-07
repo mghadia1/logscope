@@ -9,9 +9,10 @@ logs of two earlier projects, SurgiServe and Gatekeeper.
 It deliberately does not use Elasticsearch, OpenSearch, Loki, ClickHouse or
 SQLite's full-text search: the point is to build the parts they provide.
 
-> **Status:** Milestones 0-1 of 7. Events can be ingested, survive crashes,
-> and be searched by time range, by scanning everything. There is no index
-> or query language yet (Milestones 2-3), and the UI is still a shell.
+> **Status:** Milestones 0-2 of 7. Events can be ingested, survive crashes,
+> and be searched by time range and by terms through an inverted index. The
+> query form is minimal (terms that must all match); the real query
+> language is Milestone 3, and the UI is still a shell.
 
 ## Status
 
@@ -19,7 +20,7 @@ SQLite's full-text search: the point is to build the parts they provide.
 |---|-----------|--------|
 | 0 | Skeleton: FastAPI `/api/health`, React (Vite, JavaScript) shell served by the API, ruff + mypy --strict + pytest, ESLint + Vitest, CI, one-container Compose | Done |
 | 1 | Ingestion and storage: `POST /api/ingest`, append-only write-ahead log with crash recovery, time-partitioned segments, search by time range by scanning | Done |
-| 2 | Inverted index per segment; segment time bounds to skip segments; indexed results checked against the scan | Not started |
+| 2 | Inverted index per segment; segment time bounds to skip segments; indexed results checked against the scan | Done |
 | 3 | Query language (`level:error service:gatekeeper status>=500 "upstream timeout" NOT route:/healthz`), positioned errors; property test: index equals scan | Not started |
 | 4 | Aggregations, live tail over Server-Sent Events, retention, merging small segments | Not started |
 | 5 | React UI: query box, results, histogram, field sidebar, live tail | Not started |
@@ -36,6 +37,7 @@ curl -X POST --data-binary @- localhost:8200/api/ingest <<'EOF'
 {"time": "2026-10-06T21:00:00Z", "level": "INFO", "msg": "hello"}
 EOF
 curl 'localhost:8200/api/search?start=2026-10-06T00:00:00Z'
+curl -G localhost:8200/api/search --data-urlencode 'q=level:info hello'
 make down      # the data stays in a Docker volume; `make reset` deletes it
 ```
 
@@ -63,10 +65,21 @@ per line.
   crash. If the disk fails, the answer is 503 and writes stay refused until
   a restart.
 
-**`GET /api/search?start=&end=&limit=&cursor=`**: events with
-`start <= time < end` (ISO 8601 with a time zone; both optional), newest
-first, at most `limit` (1-1000, default 100). Pass `next_cursor` back as
-`cursor` for the next page. The answer includes how much was scanned.
+**`GET /api/search?q=&start=&end=&limit=&cursor=&index=`**: events
+matching `q` with `start <= time < end` (ISO 8601 with a time zone; both
+optional), newest first, at most `limit` (1-1000, default 100). Pass
+`next_cursor` back as `cursor` for the next page. `index=false` scans every
+event instead (the baseline). The answer says how many segments were read
+or skipped and how many events were read.
+
+`q` is, for now, terms separated by spaces, all of which must match
+(Milestone 3 brings OR, NOT, parentheses, phrases and ranges):
+
+- `field:value` matches a field's whole value: `level:error` (also "ERROR"),
+  `status:503` (also 503.0 and "503"), `http.method:get` (nested objects use
+  dots; array elements count as the array's field).
+- a bare word matches that word anywhere in the event: `timeout`. A word
+  with several parts, like `3f2a-77`, needs all of them.
 
 **`GET /api/stats`**: events in memory and in segments, WAL files, whether
 writes are accepted.
@@ -85,7 +98,8 @@ POST /api/ingest
  memtable (in memory, searchable at once)
    │  flush: 50,000 events, or the oldest has waited 60 s
    ▼
- segments/2026-10-06T21/…-….jsonl   one file per hour per flush
+ segments/2026-10-06T21/…-….jsonl   one file per hour per flush,
+                    …-….idx     with its index
  MANIFEST.json                      which segments exist, and "flushed through" id
 ```
 
@@ -112,8 +126,35 @@ POST /api/ingest
   the data on disk (PostgreSQL's "fsyncgate"). The partial record is cut
   off, and ingest answers 503 until a restart.
 
-Search in this milestone reads every segment and every event in memory:
-deliberately, as the baseline the index in Milestone 2 is measured against.
+## How search works
+
+```
+segments, newest first ──► outside the time range? skip
+        │                  older than the top `limit` found so far? stop
+        ▼
+ segment index (.idx, memory-mapped)
+   times + ids of every row ──► binary search: the rows in the time range
+   term directory (sorted)  ──► binary search: each term's rows
+        │  field term: any of its spellings (union); word: all parts;
+        │  terms: all of them (intersection)
+        ▼
+ matching rows, newest first ──► read just those lines of the .jsonl
+```
+
+- **One function decides what an event contains,** `terms_of`, and both the
+  index and the full scan use it. So they cannot disagree about what
+  matches; only the index's machinery (writing, binary search,
+  intersecting, stopping early) can be wrong, and that is what the tests
+  compare with the scan.
+- **Rows in a segment are sorted by (time, id),** and the index keeps each
+  row's time and id. A search orders and filters rows without reading
+  them, reads only the ones it returns, and stops once nothing older can
+  make the top `limit`.
+- **Events still in memory** have their own in-memory index, so a search
+  sees them at once, including those being flushed.
+- **Not indexed:** the timestamp fields (the time range covers them), and
+  string values over 256 characters as exact values (they are still
+  indexed word by word; asking for one exactly is refused, not missed).
 
 ### How it is tested
 
@@ -128,6 +169,14 @@ deliberately, as the baseline the index in Milestone 2 is measured against.
   160 kills (40 seeds) lost and duplicated nothing.
 - The smoke test SIGKILLs the container itself and checks that an event
   held only in the WAL comes back.
+- **The index against the scan:** Hypothesis generates 400 combinations of
+  query, time range, limit and cursor over a store whose segments overlap in
+  time (late events), with some events still in memory; the index must
+  return the same events in the same order as the full scan. Five
+  deliberately planted bugs (a tie-break, both ends of the time range, a
+  union, the reading order) each make it fail.
+- A search during a flush, with events both in the memtable being flushed
+  and in the new one.
 
 What is **not** tested: power loss. A SIGKILL leaves the operating system's
 page cache intact; a power cut does not. On macOS, `fsync` does not even
@@ -153,11 +202,15 @@ make dev-ui    # UI on :5173, forwarding /api to :8000
 | `src/logscope/events.py` | Parsing a line into an event; timestamps |
 | `src/logscope/ingest.py` | Splitting a request body into lines; per-line errors |
 | `src/logscope/wal.py` | The write-ahead log: record format, torn-tail detection |
-| `src/logscope/store.py` | Memtable, flushes, segments, manifest, recovery, scan search |
+| `src/logscope/store.py` | Memtable, flushes, segments, manifest, recovery, search |
+| `src/logscope/terms.py` | What an event is indexed under (`terms_of`) |
+| `src/logscope/query.py` | Parsing `q`; the scan's match test |
+| `src/logscope/index.py` | Segment index files (build, memory-mapped lookup); the in-memory index |
 | `src/logscope/settings.py` | Configuration from `LOGSCOPE_*` environment variables |
 | `ui/` | The React UI (JavaScript, Vite) |
 | `scripts/smoke.sh` | Checks a running stack over HTTP, including a SIGKILL |
 | `tests/test_crash.py` | The SIGKILL test |
+| `tests/test_search.py` | The index against the scan (Hypothesis) |
 
 ## Decisions so far
 
@@ -172,8 +225,13 @@ make dev-ui    # UI on :5173, forwarding /api to :8000
 - **Bad lines are rejected one by one; oversized batches whole.** A bad line
   is the sender's data problem and retrying will not fix it; a batch too
   big can be split and retried.
-- **JSON lines for segments, for now.** Readable and easy to check by eye;
-  compression and an index come later.
+- **JSON lines for segments, beside a binary index.** The data stays
+  readable by eye; the index is compact, memory-mapped, and needs no
+  parsing to open.
+- **Field values match case-insensitively, numbers by value.** `level:info`
+  finds "INFO" (SurgiServe writes "info", Gatekeeper "INFO"), and
+  `status:503` finds 503, 503.0 and "503". A value is a number only in JSON's
+  syntax, so `code:007` matches the string "007", not 7.
 - **JavaScript, not TypeScript, for the UI:** TypeScript is not yet a
   language I can write and explain unaided.
 
@@ -193,3 +251,10 @@ make dev-ui    # UI on :5173, forwarding /api to :8000
    second run found the first run's events. It now runs as its own Compose
    project with its own volume, deleted afterwards, so it never touches the
    data of `make up` either.
+4. **The test comparing the index with the scan caught nothing.** It passed
+   400 generated cases, and still passed with each of three bugs planted on
+   purpose. Its data could not reach them: events were spread over 21,600
+   seconds, so equal times at segment edges almost never happened; few sat
+   exactly on a range boundary; and no query value had two spellings. With
+   times on a 5-minute grid and values like `503.0`, all five planted bugs
+   now fail it.

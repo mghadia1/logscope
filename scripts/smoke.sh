@@ -3,7 +3,7 @@
 # endpoint, the built UI and its bundle, JSON 404s, 405s with Allow, that
 # the container runs unprivileged with a writable data volume, and that
 # ingested events are searchable and survive both a clean restart and a
-# SIGKILL of the container.
+# SIGKILL of the container, and that query terms work through the index.
 set -euo pipefail
 base_url="${BASE_URL:-http://localhost:8200}"
 
@@ -76,5 +76,16 @@ docker compose up --detach --wait logscope >/dev/null 2>&1
 wait_healthy
 expect "after SIGKILL, replayed from the WAL" "$(search | messages)" "third second first"
 expect "replayed into memory, not a segment" "$(stat events_in_memory)" "1"
+
+# Milestone 2: query terms through the index, and the same without it.
+query() { # query Q [INDEX]: the messages found
+  curl --fail --silent --show-error --get --data-urlencode "q=$1" \
+    --data-urlencode "index=${2:-true}" "$base_url/api/search" | messages
+}
+expect "q=service:smoke (indexed segment)" "$(query service:smoke)" "second first"
+expect "q=third (memtable)" "$(query third)" "third"
+expect "q=service:smoke without the index" "$(query service:smoke false)" "second first"
+expect "q=nothing-like-this" "$(query nothing-like-this)" ""
+expect "bad query" "$(status --get --data-urlencode 'q=level:' "$base_url/api/search")" "422"
 
 echo "smoke test passed"

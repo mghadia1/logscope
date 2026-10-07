@@ -3,18 +3,28 @@ says which segments exist.
 
 Write path
     ``append`` writes one WAL record and fsyncs it, then adds the events to
-    the *memtable*, where searches see them at once.
+    the *memtable* (with an in-memory index), where searches see them at
+    once.
 
 Flush (when the memtable is big or old enough)
     The memtable is frozen and a new WAL file started. The frozen events go
-    into one segment file per hour they fall in; then a new manifest lists
-    those segments and the highest id they hold ("flushed through"). Only
-    after that are the old WAL files deleted.
+    into one segment file per hour they fall in, each with an index file;
+    then a new manifest lists those segments and the highest id they hold
+    ("flushed through"). Only after that are the old WAL files deleted.
 
 Recovery (``open``)
-    The manifest says which segments are real: any other segment file was
-    left by a flush that crashed, and is deleted. WAL records past "flushed
-    through" are replayed into the memtable, and a torn tail is cut off.
+    The manifest says which segments are real: any other segment or index
+    file was left by a flush that crashed, and is deleted. WAL records past
+    "flushed through" are replayed into the memtable, and a torn tail is cut
+    off. A listed segment without an index gets one.
+
+Search
+    Segments are visited newest first, skipping those outside the time
+    range; in each, the index gives the matching rows and their times, so
+    rows are read newest first and the search stops as soon as nothing older
+    can make the top ``limit``. ``use_index=False`` is the plain scan of
+    Milestone 1, kept as the baseline the index is checked and measured
+    against.
 
 Every file that matters is written under a temporary name, fsynced, renamed
 into place, and its directory fsynced, so a crash leaves either the old
@@ -29,19 +39,26 @@ import logging
 import os
 import threading
 import time
+from bisect import bisect_left
+from collections import OrderedDict
 from collections.abc import Iterator, Sequence
 from dataclasses import asdict, dataclass
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from . import wal
+from . import index, wal
 from .events import EPOCH, MAX_TIME, MIN_TIME, Event, ParsedLine
+from .query import Term, matches
+from .terms import terms_of
 
 log = logging.getLogger(__name__)
 
 MANIFEST = "MANIFEST.json"
 PARTITION = 3600 * 1_000_000  # one hour, in microseconds
+# Open (memory-mapped) segment indexes kept around; each holds a file
+# descriptor.
+INDEX_CACHE = 256
 
 
 class StoreError(Exception):
@@ -62,7 +79,7 @@ class StoreCorruption(StoreError):
 
 @dataclass(frozen=True, slots=True)
 class Segment:
-    path: str  # relative to the data directory
+    path: str  # the .jsonl, relative to the data directory
     partition: str
     min_time: int
     max_time: int
@@ -71,24 +88,73 @@ class Segment:
     count: int
     bytes: int
 
+    @property
+    def index_path(self) -> str:
+        return self.path.removesuffix(".jsonl") + ".idx"
+
 
 @dataclass(frozen=True, slots=True)
 class Recovery:
     replayed: int  # events replayed from the WAL into the memtable
     torn_bytes: int  # cut off the end of the WAL
-    orphans: list[str]  # segment files no manifest listed, deleted
+    orphans: list[str]  # segment and index files no manifest listed, deleted
+    indexed: int = 0  # listed segments that had no index and got one
 
 
 @dataclass(slots=True)
-class ScanStats:
-    segments_scanned: int = 0
-    events_scanned: int = 0
+class SearchStats:
+    segments_total: int = 0
+    segments_read: int = 0  # opened: index consulted, or (scan) every row read
+    segments_skipped: int = 0  # never opened: outside the time range, or older
+    # than everything already found
+    events_read: int = 0  # rows parsed from segment files, plus memtable
+    # events looked at
+    candidates: int = 0  # rows the index matched within the time range
 
 
 def partition_of(time: int) -> str:
     """The UTC hour an event falls in, e.g. "2026-10-06T21"."""
     start = EPOCH + timedelta(microseconds=time - time % PARTITION)
     return start.strftime("%Y-%m-%dT%H")
+
+
+class _Keys:
+    """A segment index's rows as (time, id) keys, for bisect."""
+
+    def __init__(self, segment_index: index.SegmentIndex) -> None:
+        self._times = segment_index.times
+        self._ids = segment_index.ids
+
+    def __len__(self) -> int:
+        return len(self._times)
+
+    def __getitem__(self, row: int) -> tuple[int, int]:
+        return self._times[row], self._ids[row]
+
+
+class _Top:
+    """The ``limit`` largest (time, id) keys seen, with their events."""
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self._heap: list[tuple[tuple[int, int], Event]] = []
+
+    def full_above(self, key: tuple[int, int]) -> bool:
+        """Whether ``key`` and everything below it can no longer get in."""
+        return len(self._heap) >= self.limit and key < self._heap[0][0]
+
+    def wants(self, key: tuple[int, int]) -> bool:
+        """Whether an event with ``key`` would get in (so it is worth reading)."""
+        return len(self._heap) < self.limit or key > self._heap[0][0]
+
+    def add(self, key: tuple[int, int], event: Event) -> None:
+        if len(self._heap) < self.limit:
+            heapq.heappush(self._heap, (key, event))
+        else:
+            heapq.heapreplace(self._heap, (key, event))
+
+    def newest_first(self) -> list[Event]:
+        return [event for _, event in sorted(self._heap, reverse=True)]
 
 
 class Store:
@@ -106,9 +172,9 @@ class Store:
         self._lock = threading.Lock()
         # One flush at a time; held for the whole flush, not just the swap.
         self._flush_lock = threading.Lock()
-        self._memtable: list[Event] = []
+        self._memtable = index.MemIndex()
         self._memtable_since: float | None = None  # monotonic, first event
-        self._frozen: list[Event] = []  # being flushed, still searchable
+        self._frozen = index.MemIndex()  # being flushed, still searchable
         self._segments: list[Segment] = []
         self._flushed_through = 0
         self._next_id = 1
@@ -119,6 +185,8 @@ class Store:
         self._lock_fd: int | None = None
         self._stop = threading.Event()
         self._flusher: threading.Thread | None = None
+        self._indexes: OrderedDict[str, index.SegmentIndex] = OrderedDict()
+        self._indexes_lock = threading.Lock()
 
     @property
     def _wal_dir(self) -> Path:
@@ -159,6 +227,7 @@ class Store:
     def _recover(self) -> Recovery:
         self._segments, self._flushed_through = self._read_manifest()
         listed = {segment.path for segment in self._segments}
+        listed |= {segment.index_path for segment in self._segments}
         for segment in self._segments:
             if not (self.data_dir / segment.path).is_file():
                 raise StoreCorruption(
@@ -172,17 +241,22 @@ class Store:
                 orphans.append(relative)
                 log.warning("deleted %s: left by a flush that did not finish", relative)
         (self.data_dir / f"{MANIFEST}.tmp").unlink(missing_ok=True)
+        indexed = 0
+        for segment in self._segments:
+            if not (self.data_dir / segment.index_path).is_file():
+                self._index_existing(segment)
+                indexed += 1
 
         expected = self._flushed_through + 1  # the next id the WAL must hold
         replayed = torn = 0
         files = sorted(self._wal_dir.glob("*.wal"))
-        for index, path in enumerate(files):
+        for position, path in enumerate(files):
             try:
                 result = wal.read(path)
             except wal.WALCorruption as error:
                 raise StoreCorruption(str(error)) from None
             if result.torn_bytes:
-                if index != len(files) - 1:
+                if position != len(files) - 1:
                     raise StoreCorruption(
                         f"{path}: damaged record at byte {result.valid_end}; only"
                         " the newest WAL file can end in a torn write"
@@ -206,10 +280,9 @@ class Store:
                         f" {record.first_id}-{record.last_id}, but the next id"
                         f" should be {expected}: events are missing"
                     )
-                self._memtable.extend(
-                    Event(record.first_id + i, event_time, data)
-                    for i, (event_time, data) in enumerate(record.events)
-                )
+                for i, (event_time, data) in enumerate(record.events):
+                    event = Event(record.first_id + i, event_time, data)
+                    self._memtable.add(event, terms_of(data))
                 replayed += len(record.events)
                 expected = record.last_id + 1
                 holds_unflushed = True
@@ -218,19 +291,20 @@ class Store:
             else:
                 path.unlink()  # empty, or everything in it is in segments
         self._next_id = expected
-        if self._memtable:
+        if len(self._memtable):
             self._memtable_since = time.monotonic()
         self._wal = wal.Writer(self._wal_dir / f"{self._next_id:020d}.wal")
         wal.fsync_dir(self._wal_dir)
-        if replayed or torn or orphans:
+        if replayed or torn or orphans or indexed:
             log.info(
                 "recovered: %d events replayed from the WAL, %d torn bytes cut,"
-                " %d orphan segment files deleted",
+                " %d orphan files deleted, %d segments indexed",
                 replayed,
                 torn,
                 len(orphans),
+                indexed,
             )
-        return Recovery(replayed, torn, orphans)
+        return Recovery(replayed, torn, orphans, indexed)
 
     def _read_manifest(self) -> tuple[list[Segment], int]:
         path = self.data_dir / MANIFEST
@@ -244,6 +318,18 @@ class Store:
         segments = [Segment(**item) for item in body["segments"]]
         return segments, int(body["flushed_through"])
 
+    def _index_existing(self, segment: Segment) -> None:
+        """Index a segment written without one (by Milestone 1)."""
+        rows = []
+        offset = 0
+        with open(self.data_dir / segment.path, "rb") as file:
+            for line in file:
+                item = json.loads(line)
+                rows.append((item["t"], item["id"], offset, terms_of(item["e"])))
+                offset += len(line)
+        _write_atomic(self.data_dir / segment.index_path, index.build(rows))
+        log.info("indexed %s", segment.path)
+
     # Writing
 
     def append(self, lines: Sequence[ParsedLine]) -> tuple[int, int]:
@@ -251,6 +337,8 @@ class Store:
         returns, the batch survives a crash."""
         if not lines:
             raise ValueError("an empty batch")
+        # Outside the lock: working out the terms is the slow part.
+        line_terms = [terms_of(line.data) for line in lines]
         with self._lock:
             if self._broken:
                 raise StoreUnavailable(self._broken)
@@ -263,48 +351,50 @@ class Store:
                 log.error("%s; refusing writes until restarted", self._broken)
                 raise StoreUnavailable(self._broken) from error
             self._next_id += len(lines)
-            if not self._memtable:
+            if not len(self._memtable):
                 self._memtable_since = time.monotonic()
-            self._memtable.extend(
-                Event(first + i, line.time, line.data) for i, line in enumerate(lines)
-            )
+            for i, (line, terms) in enumerate(zip(lines, line_terms, strict=True)):
+                self._memtable.add(Event(first + i, line.time, line.data), terms)
             return first, self._next_id - 1
 
     def flush(self) -> list[Segment]:
         """Move the memtable into segment files; returns the new segments."""
         with self._flush_lock:
             with self._lock:
-                if not self._memtable:
+                if not len(self._memtable):
                     return []
                 assert self._wal is not None, "the store is not open"
                 # The new WAL file first: if that fails, nothing has changed.
                 new_wal = wal.Writer(self._wal_dir / f"{self._next_id:020d}.wal")
                 wal.fsync_dir(self._wal_dir)
-                frozen, self._memtable = self._memtable, []
+                frozen, self._memtable = self._memtable, index.MemIndex()
                 self._memtable_since = None
                 self._frozen = frozen
                 old_wals = [*self._wal_backlog, self._wal.path]
                 self._wal_backlog = []
                 self._wal.close()
                 self._wal = new_wal
-            through = frozen[-1].id
+            through = frozen.events[-1].id
             try:
-                written = self._write_segments(frozen)
+                written = self._write_segments(frozen.events)
                 segments = [*self._segments, *written]
                 self._write_manifest(segments, through)
             except BaseException:
                 # Put the events back where searches and the next flush find
                 # them; their WAL files are kept.
                 with self._lock:
-                    self._memtable = frozen + self._memtable
+                    restored = index.MemIndex()
+                    for event in [*frozen.events, *self._memtable.events]:
+                        restored.add(event, terms_of(event.data))
+                    self._memtable = restored
                     self._memtable_since = time.monotonic()
-                    self._frozen = []
+                    self._frozen = index.MemIndex()
                     self._wal_backlog = old_wals + self._wal_backlog
                 raise
             with self._lock:
                 self._segments = segments
                 self._flushed_through = through
-                self._frozen = []
+                self._frozen = index.MemIndex()
             self._delete_wals(old_wals)
             return written
 
@@ -321,21 +411,27 @@ class Store:
                 wal.fsync_dir(self._segment_dir)
             min_id = min(event.id for event in items)
             max_id = max(event.id for event in items)
-            name = f"{min_id:020d}-{max_id:020d}.jsonl"
-            data = b"".join(_segment_line(event) for event in items)
-            _write_atomic(directory / name, data)
-            written.append(
-                Segment(
-                    path=f"segments/{partition}/{name}",
-                    partition=partition,
-                    min_time=items[0].time,
-                    max_time=items[-1].time,
-                    min_id=min_id,
-                    max_id=max_id,
-                    count=len(items),
-                    bytes=len(data),
-                )
+            segment_lines = []
+            rows = []
+            offset = 0
+            for event in items:
+                line = _segment_line(event)
+                segment_lines.append(line)
+                rows.append((event.time, event.id, offset, terms_of(event.data)))
+                offset += len(line)
+            segment = Segment(
+                path=f"segments/{partition}/{min_id:020d}-{max_id:020d}.jsonl",
+                partition=partition,
+                min_time=items[0].time,
+                max_time=items[-1].time,
+                min_id=min_id,
+                max_id=max_id,
+                count=len(items),
+                bytes=offset,
             )
+            _write_atomic(self.data_dir / segment.index_path, index.build(rows))
+            _write_atomic(self.data_dir / segment.path, b"".join(segment_lines))
+            written.append(segment)
         return written
 
     def _write_manifest(self, segments: list[Segment], flushed_through: int) -> None:
@@ -407,37 +503,154 @@ class Store:
 
     def search(
         self,
+        query: list[Term] | None = None,
         start: int = MIN_TIME,
         end: int = MAX_TIME,
         limit: int = 100,
         before: tuple[int, int] | None = None,
-    ) -> tuple[list[Event], ScanStats]:
-        """The newest ``limit`` events with ``start <= time < end``, newest
-        first; ``before`` is a (time, id) to continue below (pagination).
+        *,
+        use_index: bool = True,
+    ) -> tuple[list[Event], SearchStats]:
+        """The newest ``limit`` events matching ``query`` with
+        ``start <= time < end``, newest first; ``before`` is a (time, id) to
+        continue below (pagination)."""
+        query = query or []
+        if use_index:
+            return self._search_indexed(query, start, end, limit, before)
+        return self._search_scan(query, start, end, limit, before)
 
-        Milestone 1 reads every segment and every event in memory: this is
-        the baseline the index (Milestone 2) is measured against.
-        """
+    def _search_indexed(
+        self,
+        query: list[Term],
+        start: int,
+        end: int,
+        limit: int,
+        before: tuple[int, int] | None,
+    ) -> tuple[list[Event], SearchStats]:
         with self._lock:
             segments = list(self._segments)
-            memory = [*self._frozen, *self._memtable]
-        stats = ScanStats()
+            # The memtable keeps growing; take its matches now, under the lock.
+            in_memory = []
+            for memory in (self._frozen, self._memtable):
+                rows = index.candidate_rows(memory.lookup, query)
+                found = range(len(memory)) if rows is None else rows
+                in_memory += [memory.events[row] for row in found]
+        stats = SearchStats(segments_total=len(segments))
+        top = _Top(limit)
+        for event in in_memory:
+            stats.events_read += 1
+            key = (event.time, event.id)
+            if (
+                start <= event.time < end
+                and (before is None or key < before)
+                and top.wants(key)
+            ):
+                top.add(key, event)
 
-        def scanned() -> Iterator[Event]:
+        # Newest first: once the top is full, a segment whose newest possible
+        # key is below it, and every segment after it, can be skipped.
+        segments.sort(key=lambda s: (s.max_time, s.max_id), reverse=True)
+        for number, segment in enumerate(segments):
+            if top.full_above((segment.max_time, segment.max_id)):
+                stats.segments_skipped += len(segments) - number
+                break
+            if (
+                segment.max_time < start
+                or segment.min_time >= end
+                or (before is not None and (segment.min_time, segment.min_id) >= before)
+            ):
+                stats.segments_skipped += 1
+                continue
+            stats.segments_read += 1
+            self._search_segment(segment, query, start, end, before, top, stats)
+        return top.newest_first(), stats
+
+    def _search_segment(
+        self,
+        segment: Segment,
+        query: list[Term],
+        start: int,
+        end: int,
+        before: tuple[int, int] | None,
+        top: _Top,
+        stats: SearchStats,
+    ) -> None:
+        segment_index = self._index(segment)
+        keys = _Keys(segment_index)
+        # Rows are sorted by (time, id): the time range and the cursor are a
+        # window of rows, found by binary search.
+        low = bisect_left(keys, (start, 0))
+        high = bisect_left(keys, (end, 0))
+        if before is not None:
+            high = min(high, bisect_left(keys, before))
+        rows = index.candidate_rows(segment_index.lookup, query)
+        newest_first: Sequence[int]
+        if rows is None:
+            newest_first = range(high - 1, low - 1, -1)
+        else:
+            newest_first = sorted((r for r in rows if low <= r < high), reverse=True)
+        stats.candidates += len(newest_first)
+        with open(self.data_dir / segment.path, "rb") as file:
+
+            def read(row: int) -> Event:
+                file.seek(segment_index.offsets[row])
+                item = json.loads(file.readline())
+                stats.events_read += 1
+                return Event(item["id"], item["t"], item["e"])
+
+            for row in newest_first:
+                key = keys[row]
+                if top.full_above(key):
+                    break  # every row after this one is older still
+                if top.wants(key):
+                    top.add(key, read(row))
+
+    def _index(self, segment: Segment) -> index.SegmentIndex:
+        with self._indexes_lock:
+            found = self._indexes.get(segment.index_path)
+            if found is not None:
+                self._indexes.move_to_end(segment.index_path)
+                return found
+        opened = index.SegmentIndex(self.data_dir / segment.index_path)
+        with self._indexes_lock:
+            self._indexes[segment.index_path] = opened
+            # Dropped from the cache, an index is unmapped once the last
+            # search using it lets go.
+            while len(self._indexes) > INDEX_CACHE:
+                self._indexes.popitem(last=False)
+        return opened
+
+    def _search_scan(
+        self,
+        query: list[Term],
+        start: int,
+        end: int,
+        limit: int,
+        before: tuple[int, int] | None,
+    ) -> tuple[list[Event], SearchStats]:
+        """Milestone 1's search: read every event, test each one."""
+        with self._lock:
+            segments = list(self._segments)
+            memory = [*self._frozen.events, *self._memtable.events]
+        stats = SearchStats(segments_total=len(segments))
+
+        def everything() -> Iterator[Event]:
             for segment in segments:
-                stats.segments_scanned += 1
+                stats.segments_read += 1
                 yield from self._read_segment(segment)
             yield from memory
 
-        def matches() -> Iterator[Event]:
-            for event in scanned():
-                stats.events_scanned += 1
-                if start <= event.time < end and (
-                    before is None or (event.time, event.id) < before
+        def matching() -> Iterator[Event]:
+            for event in everything():
+                stats.events_read += 1
+                if (
+                    start <= event.time < end
+                    and (before is None or (event.time, event.id) < before)
+                    and matches(terms_of(event.data), query)
                 ):
                     yield event
 
-        found = heapq.nlargest(limit, matches(), key=lambda e: (e.time, e.id))
+        found = heapq.nlargest(limit, matching(), key=lambda e: (e.time, e.id))
         return found, stats
 
     def _read_segment(self, segment: Segment) -> Iterator[Event]:
