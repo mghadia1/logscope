@@ -9,12 +9,13 @@ logs of two earlier projects, SurgiServe and Gatekeeper.
 It deliberately does not use Elasticsearch, OpenSearch, Loki, ClickHouse or
 SQLite's full-text search: the point is to build the parts they provide.
 
-> **Status:** Milestones 0-5 of 7. Events can be ingested, survive crashes,
-> and be searched with a small query language through an inverted index;
-> counted over time, by value and as numbers; and followed live, from an API
-> and a browser UI. Old data expires and small segments are merged. Nothing
-> has been measured yet (Milestone 6), and the only data it has seen is
-> synthetic.
+> **Status:** Milestones 0-5 of 7, and Milestone 6's tools. Events can be
+> ingested, survive crashes, and be searched with a small query language
+> through an inverted index; counted over time, by value and as numbers;
+> and followed live, from an API and a browser UI. A shipper sends real log
+> files into it, and 157,452 real log lines from Gatekeeper and SurgiServe
+> have been captured for the benchmark, which is built but **has no valid
+> results yet**: nothing about LogScope's speed is claimed here.
 
 ## Status
 
@@ -26,7 +27,7 @@ SQLite's full-text search: the point is to build the parts they provide.
 | 3 | Query language (`level:error service:gatekeeper status>=500 "upstream timeout" NOT route:/healthz`), positioned errors; property test: index equals scan | Done |
 | 4 | Aggregations, live tail over Server-Sent Events, retention, merging small segments | Done |
 | 5 | React UI: query box, results, histogram, field sidebar, live tail | Done |
-| 6 | Real logs (SurgiServe, Gatekeeper) through a shipper; measured ingest rate and query latency, index vs scan | Not started |
+| 6 | Real logs (SurgiServe, Gatekeeper) through a shipper; measured ingest rate and query latency, index vs scan | Shipper, real-log capture and benchmark built; no valid results yet (the host was swapping) |
 | 7 | Architecture diagram, design decisions, failures found, benchmarks | Not started |
 
 ## Quickstart
@@ -143,6 +144,37 @@ server buffering without limit; when the server shuts down, `event: end`.
 waiting to be deleted, the retention period, whether writes are accepted.
 
 **`GET /api/health`**: liveness only.
+
+## Shipping logs
+
+`python -m logscope.ship` follows a log file (or reads standard input) and
+posts it to `/api/ingest` in batches (1,000 lines, 1 MiB, or after 1 s,
+whichever comes first):
+
+```bash
+python -m logscope.ship --file /var/log/app.jsonl --checkpoint app.ckpt
+docker compose logs --no-log-prefix -f gatekeeper | python -m logscope.ship
+```
+
+What it promises: **every line is delivered at least once.**
+
+- Network errors, timeouts, 429s and 5xx (LogScope's 503 when its disk
+  fails) are retried with exponential backoff and jitter until they succeed;
+  a stop signal ends the wait, leaving the batch for the next run.
+- A 413 splits the batch in half, recursively; a single line too big for any
+  request is counted as rejected, so it cannot stop the shipper for good.
+- Lines the server rejects are counted and reported, not retried.
+- A line that is not a JSON object (a startup message, a Go panic) is sent
+  as `{"message": <line>, "unparsed": true}` rather than lost.
+- With `--file`, it follows the file through growth, rotation (a new inode)
+  and truncation, sends a line only once it is complete, and checkpoints the
+  offset after each delivered batch. Delivery, then checkpoint: a crash
+  between the two resends one batch, never skips one.
+
+Tested against a scripted server (each failure above) and, end to end, as a
+separate process against a real LogScope: a rerun from the checkpoint sends
+nothing twice, and a shipper SIGKILLed mid-file and restarted delivers every
+line, duplicating at most one batch.
 
 ## The interface
 
@@ -347,6 +379,55 @@ page cache intact; a power cut does not. On macOS, `fsync` does not even
 flush the drive's cache (`F_FULLFSYNC` does); in the Docker image the
 fsync goes to Linux, then through Docker Desktop's virtual disk.
 
+## Load testing
+
+**Status: built, no valid results.** A trial run checked the runner end to
+end, but the laptop was swapping (39 to 810 MB swapped in during its runs,
+against a 50 MB limit), so its numbers were deleted, not reported.
+
+### The logs
+
+`make capture` runs the two earlier projects from their own repositories,
+under traffic sent from here, and saves their containers' logs outside the
+repository (`~/.cache/logscope-bench/corpus`, with a manifest of counts and
+SHA-256):
+
+- **Gatekeeper** (both replicas, Redis rate limiting): 150,000 requests that
+  exercise what a gateway does: proxied requests (most, each with its own
+  API key), a hammered key, unknown paths, wrong methods, an offline
+  backend, a backend slower than its timeout. They came back 200 (126,488),
+  429 (13,083), 404 (4,497), 502 (2,947), 504 (1,557) and 405 (1,428), and
+  Gatekeeper wrote 151,836 log lines.
+- **SurgiServe** (API and a worker): 1,500 requests (uploads, some bad, and
+  lookups of missing jobs), 5,616 log lines. The worker ran with
+  `SURGISERVE_MODEL=fake`: SurgiServe's real logs, but no real inference.
+
+157,452 lines, 50 MB, every one a JSON object.
+
+**Something the real logs showed straight away:** Gatekeeper logs every
+request at INFO, its 502s and 504s included (only "instance ejected" is
+WARN), so a search for `level:error` finds none of its failures; they are
+found by `status>=500`. A choice in Gatekeeper's access log, not a LogScope
+bug, but the kind of thing a log search exists to show.
+
+### The method
+
+`make bench` runs LogScope as its own Compose project with the client in
+the same network (no Docker Desktop port forwarding in the numbers):
+
+- **Ingest:** the whole corpus, sent by the real shipper into an empty store
+  at batch sizes of 100, 1,000 and 5,000 lines, a fresh volume each time;
+  events per second by the shipper's clock.
+- **Queries:** the corpus loaded once, the store restarted (so everything is
+  in segments) and given a maintenance pass; then 11 searches built from the
+  corpus itself (a real request id, the offline backend's real error
+  text), each repeated with the index and as the full scan, alternately,
+  plus the three aggregations behind the UI. Latency is the server's own
+  measure, with the client's wall time beside it.
+- **Discipline, as in SurgiServe's and Gatekeeper's benchmarks:** two passes,
+  the second in reverse order; it refuses to start while the host is
+  swapping, and marks any run with over 50 MB swapped in invalid.
+
 ## Development
 
 Needs Python 3.14 and Node 20.19 or newer.
@@ -377,6 +458,10 @@ make dev-ui    # UI on :5173, forwarding /api to :8000
 | `ui/src/components/` | Query bar, timeline, fields, results |
 | `ui/src/lib/` | The API client, query editing, time ranges, the live tail |
 | `scripts/demo_data.py` | Synthetic demo events (`make demo`) |
+| `src/logscope/ship.py` | The shipper |
+| `bench/capture.py` | Captures real Gatekeeper and SurgiServe logs (`make capture`) |
+| `bench/run.py`, `bench/client.py` | The benchmark (`make bench`) |
+| `tests/test_ship.py` | The shipper: failures, following files, a SIGKILL mid-file |
 | `scripts/smoke.sh` | Checks a running stack over HTTP, including a SIGKILL |
 | `tests/test_crash.py` | The SIGKILL test |
 | `tests/test_search.py` | The index against the scan (Hypothesis) |
@@ -480,3 +565,15 @@ make dev-ui    # UI on :5173, forwarding /api to :8000
    first round step was a week, so the axis had no labels at all (caught by
    a unit test). Ticks now sit on round times within the span, or every
    n-th bar.
+10. **The SIGKILL test of the shipper could not catch the bug it was
+    for.** Checkpointing before delivering (which loses a batch if the
+    shipper dies in between) was planted on purpose, and the test still
+    passed three times out of three: a kill at a random moment almost never
+    lands in the milliseconds of a local request. A test that makes the
+    sender die on its third batch, and checks the checkpoint covers only
+    the first two, catches it.
+11. **The benchmark's logs were being uploaded to iCloud.** 100 MB of
+    captured logs went into the repository folder, which sits in an
+    iCloud-synced Documents folder; iCloud's sync processes took over a CPU
+    core uploading them. `.gitignore` does not stop iCloud. The corpus now
+    lives in `~/.cache/logscope-bench`, which is not synced.

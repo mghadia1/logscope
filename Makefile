@@ -2,7 +2,7 @@ PYTHON ?= python3.14
 VENV := .venv
 BIN := $(VENV)/bin
 
-.PHONY: install lint format typecheck test ui check dev-api dev-ui up down reset demo smoke clean
+.PHONY: install lint format typecheck test ui check dev-api dev-ui up down reset demo capture bench smoke clean
 
 $(BIN)/python:
 	$(PYTHON) -m venv $(VENV)
@@ -59,6 +59,15 @@ reset:
 # logs, the last six hours) into the stack `make up` started.
 demo:
 	python3 scripts/demo_data.py
+
+# Real logs for the benchmark: run Gatekeeper and SurgiServe (from ../) under
+# traffic and save their logs to ~/.cache/logscope-bench/corpus.
+capture:
+	python3 bench/capture.py
+
+# The benchmark (about 15 minutes; needs a machine that is not swapping).
+bench:
+	python3 bench/run.py
 
 # Check a fresh stack over HTTP from outside. It runs as its own Compose
 # project, with its own volume and port, so it starts empty every time and

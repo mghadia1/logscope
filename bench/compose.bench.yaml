@@ -1,0 +1,14 @@
+# Layered over compose.yaml by bench/run.py, as its own Compose project
+# (logscope-bench): a client in the same network, so Docker Desktop's port
+# forwarding is not part of any measurement.
+#
+#   docker compose -p logscope-bench -f compose.yaml -f bench/compose.bench.yaml ...
+services:
+  client:
+    build: .
+    profiles: ["bench"]
+    depends_on: [logscope]
+    volumes:
+      - ./bench:/bench:ro
+      # Outside the repository (see bench/capture.py); run.py sets it.
+      - ${LOGSCOPE_BENCH_CORPUS:?set by bench/run.py}:/corpus:ro
