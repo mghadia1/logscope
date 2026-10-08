@@ -78,6 +78,20 @@ def host_swap_mb() -> tuple[float, float]:
     return counts["Swapouts"], counts["Swapins"]
 
 
+def busy_processes(threshold: float = 20.0) -> list[dict[str, object]]:
+    """Host processes using at least `threshold` % of a core: not a validity
+    check (swap is), a record of what else was running."""
+    busy = []
+    for line in sh("ps", "-Ao", "%cpu=,comm=").splitlines():
+        cpu, _, command = line.strip().partition(" ")
+        if float(cpu) >= threshold:
+            busy.append((float(cpu), command.strip()))
+    return [
+        {"cpu_percent": cpu, "command": command}
+        for cpu, command in sorted(busy, reverse=True)
+    ]
+
+
 def fresh_stack() -> None:
     sh(*COMPOSE, "down", "--volumes", "--timeout", "15")
     sh(*COMPOSE, "up", "--detach", "--wait", "logscope")
@@ -335,6 +349,9 @@ def main() -> None:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     out_dir = ROOT / "bench" / "results" / stamp
     out_dir.mkdir(parents=True)
+    busy_at_start = busy_processes()
+    swap_at_start = sh("sysctl", "-n", "vm.swapusage").strip()
+    print(f"busy host processes: {busy_at_start}", flush=True)
     print("building", flush=True)
     sh(*COMPOSE, "--profile", "bench", "build")
     try:
@@ -342,6 +359,7 @@ def main() -> None:
         ingest = ingest_runs([int(b) for b in args.batch_sizes.split(",")])
         print("queries", flush=True)
         queries, setup = query_runs(args.reps)
+        busy_at_end = busy_processes()
     finally:
         sh(*COMPOSE, "down", "--volumes", "--timeout", "15")
 
@@ -359,6 +377,11 @@ def main() -> None:
                 "cpus": info["NCPU"],
                 "memory_gb": round(info["MemTotal"] / 2**30, 1),
             },
+            "host_swap_usage": {
+                "start": swap_at_start,
+                "end": sh("sysctl", "-n", "vm.swapusage").strip(),
+            },
+            "busy_host_processes": {"start": busy_at_start, "end": busy_at_end},
         },
         "corpus": corpus,
         "settings": {
