@@ -138,17 +138,21 @@ def ingest_runs(batch_sizes: list[int]) -> list[dict[str, object]]:
             result = ship(batch)
             _, after = host_swap_mb()
             rate = result["accepted"] / result["seconds"]
+            # The shipper also caps a batch at 1 MiB, so the setting is a
+            # maximum: record what was actually sent.
+            sent = result["read"] / result["batches"]
             run = measured(
                 {
                     "pass": run_pass,
                     "batch": batch,
                     **result,
+                    "lines_per_batch_sent": round(sent),
                     "events_per_second": round(rate),
                 },
                 after - before,
             )
             print(
-                f"  ingest pass {run_pass} batch {batch:5d}:"
+                f"  ingest pass {run_pass} batch {batch:5d} (sent {sent:,.0f}):"
                 f" {result['accepted']} events in {result['seconds']:.1f} s"
                 f" = {rate:,.0f}/s  swap-in {run['host_swapped_in_mb']} MB",
                 flush=True,
@@ -404,7 +408,8 @@ def main() -> None:
     }
     (out_dir / "results.json").write_text(json.dumps(record, indent=2) + "\n")
     ingest_lines = "\n".join(
-        f"- pass {r['pass']}, batch {r['batch']}:"
+        f"- pass {r['pass']}, batch {r['batch']}"
+        f" ({r['batches']} batches of {r['lines_per_batch_sent']:,} lines on average):"
         f" {r['accepted']:,} events in {r['seconds']} s"
         f" = {r['events_per_second']:,}/s; valid: {'yes' if r['valid'] else 'NO'}"
         for r in ingest

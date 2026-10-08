@@ -9,7 +9,7 @@ earlier projects, SurgiServe and Gatekeeper.
 It deliberately does not use Elasticsearch, OpenSearch, Loki, ClickHouse or
 SQLite's full-text search: the point is to build the parts they provide.
 
-> **Status:** Milestones 0-6 of 7. Events can be ingested, survive
+> **Status:** all 7 milestones built. Events can be ingested, survive
 > crashes, and be searched with a small query language through an inverted
 > index; counted over time, by value and as numbers; and followed live,
 > from an API and a browser UI. A shipper sends real log files into it, and
@@ -27,7 +27,7 @@ SQLite's full-text search: the point is to build the parts they provide.
 | 4 | Aggregations, live tail over Server-Sent Events, retention, merging small segments | Done |
 | 5 | React UI: query box, results, histogram, field sidebar, live tail | Done |
 | 6 | Real logs (SurgiServe, Gatekeeper) through a shipper; measured ingest rate and query latency, index vs scan | Done (29 of 34 runs valid; [results](bench/RESULTS.md)) |
-| 7 | Architecture diagram, design decisions, failures found, benchmarks | Not started |
+| 7 | Architecture diagram, design decisions, failures found, benchmarks; [explain-it-yourself prompts](docs/explain-it-yourself.md) | Done |
 
 ## Quickstart
 
@@ -52,6 +52,51 @@ are for trying the interface, not a measurement of anything.
 `make smoke` starts a separate, empty stack on :8201, checks it over HTTP
 from outside (including killing the container with SIGKILL and checking
 that nothing acknowledged was lost), and deletes it.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    gk["Gatekeeper<br/>JSON access logs"]
+    ss["SurgiServe<br/>JSON job logs"]
+    ship["Shipper<br/>batches, retries,<br/>checkpoint"]
+    ui["Browser UI<br/>React, served by the API"]
+
+    subgraph logscope["LogScope: one process, one container"]
+        api["FastAPI<br/>/api/*"]
+        wal[("Write-ahead log<br/>fsync per batch")]
+        mem["Memtable<br/>+ in-memory index"]
+        seg[("Hourly segments<br/>.jsonl + .idx<br/>MANIFEST.json")]
+        maint["Every 30 s:<br/>merge, retention,<br/>deferred deletion"]
+        tail["Live-tail queues<br/>one per client"]
+    end
+
+    gk --> ship
+    ss --> ship
+    ship -->|POST /api/ingest| api
+    api -->|① append, fsync| wal
+    api -->|② index in memory| mem
+    api -->|③ publish| tail
+    mem -->|flush: 50,000 events or 60 s| seg
+    maint --> seg
+    ui -->|search, aggregate| api
+    api -.->|read| mem
+    api -.->|read, memory-mapped| seg
+    tail -->|SSE /api/tail| ui
+```
+
+What one batch of log lines goes through:
+
+```
+shipper ──► POST /api/ingest ──► parse each line (a bad one is rejected with its line number)
+   ──► one WAL record, fsynced ──► memtable and its index ──► matching live tails ──► 200
+later: flush ──► segment .jsonl + .idx ──► new MANIFEST.json ──► the old WAL file deleted
+```
+
+Searches and aggregations read the memtable and the segments together, so
+an event is searchable as soon as it is acknowledged. Nothing is shared
+between processes: a lock file allows one LogScope per data directory, and
+the shipper only ever talks HTTP.
 
 ## API
 
@@ -465,71 +510,67 @@ make dev-ui    # UI on :5173, forwarding /api to :8000
 | Path | What |
 |------|------|
 | `src/logscope/app.py` | The FastAPI app: the API under `/api`, and the built UI |
+| `src/logscope/serve.py` | Running uvicorn; ending live tails as soon as a shutdown signal arrives |
+| `src/logscope/settings.py` | Configuration from `LOGSCOPE_*` environment variables |
+| `src/logscope/healthcheck.py` | Docker's health check (the image has no curl) |
 | `src/logscope/events.py` | Parsing a line into an event; timestamps |
 | `src/logscope/ingest.py` | Splitting a request body into lines; per-line errors |
 | `src/logscope/wal.py` | The write-ahead log: record format, torn-tail detection |
-| `src/logscope/store.py` | Memtable, flushes, segments, manifest, recovery, search |
+| `src/logscope/store.py` | Memtable, flushes, segments, manifest, recovery, merging, retention, search |
 | `src/logscope/terms.py` | What an event is indexed under (`terms_of`) |
 | `src/logscope/query.py` | The query language: lexer, parser, positioned errors; matching one event |
 | `src/logscope/index.py` | Segment index files (build, memory-mapped lookup); the in-memory index; evaluating a query to candidates |
-| `src/logscope/aggregate.py` | Histogram, top values and numeric stats, from the index |
-| `src/logscope/serve.py` | Running uvicorn, ending live tails as soon as a shutdown signal arrives |
-| `src/logscope/settings.py` | Configuration from `LOGSCOPE_*` environment variables |
+| `src/logscope/aggregate.py` | Histogram, top values, fields and numeric stats, from the index |
+| `src/logscope/ship.py` | The shipper |
 | `ui/src/App.jsx` | The page: loading, the URL, live events |
 | `ui/src/components/` | Query bar, timeline, fields, results |
 | `ui/src/lib/` | The API client, query editing, time ranges, the live tail |
-| `scripts/demo_data.py` | Synthetic demo events (`make demo`) |
-| `src/logscope/ship.py` | The shipper |
-| `bench/capture.py` | Captures real Gatekeeper and SurgiServe logs (`make capture`) |
-| `bench/run.py`, `bench/client.py` | The benchmark (`make bench`) |
-| `tests/test_ship.py` | The shipper: failures, following files, a SIGKILL mid-file |
-| `scripts/smoke.sh` | Checks a running stack over HTTP, including a SIGKILL |
-| `tests/test_crash.py` | The SIGKILL test |
+| `tests/test_wal.py`, `tests/test_store.py` | WAL records and torn tails; flushes, recovery, injected crashes |
+| `tests/test_crash.py` | The SIGKILL test, with merges |
 | `tests/test_search.py` | The index against the scan (Hypothesis) |
 | `tests/test_query.py` | The parser, its errors, and matching |
 | `tests/test_aggregate.py` | Aggregations against the scan (Hypothesis) |
 | `tests/test_maintenance.py` | Merging, retention, deferred deletion |
 | `tests/test_tail.py` | The live tail against a real uvicorn server |
+| `tests/test_ship.py` | The shipper: failures, following files, a SIGKILL mid-file |
+| `bench/capture.py` | Captures real Gatekeeper and SurgiServe logs (`make capture`) |
+| `bench/run.py`, `bench/client.py` | The benchmark (`make bench`); raw results in `bench/results/`, written up in `bench/RESULTS.md` |
+| `scripts/smoke.sh` | Checks a running stack over HTTP, including a SIGKILL |
+| `scripts/demo_data.py` | Synthetic demo events (`make demo`) |
+| `docs/explain-it-yourself.md` | Questions to answer, unaided, before LogScope goes on a resume |
 
-## Decisions so far
+## Design decisions
 
-- **One container.** The UI is built in a Node stage of the Dockerfile and
-  only its static files reach the Python image, which serves them.
-- **The UI is served by explicit routes,** `/` and `/assets`, not a static
-  mount at `/`: a mount at `/` lets the file server answer wrong-method API
-  calls (a `GET` on a POST-only route becomes a 404, `POST /api/health` a
-  405 with no `Allow` header; both checked).
-- **Timestamps without a time zone are rejected,** not assumed UTC:
-  guessing would misplace a local-time log by hours.
-- **Bad lines are rejected one by one; oversized batches whole.** A bad line
-  is the sender's data problem and retrying will not fix it; a batch too
-  big can be split and retried.
-- **JSON lines for segments, beside a binary index.** The data stays
-  readable by eye; the index is compact, memory-mapped, and needs no
-  parsing to open.
-- **Field values match case-insensitively, numbers by value.** `level:info`
-  finds "INFO" (SurgiServe writes "info", Gatekeeper "INFO"), and
-  `status:503` finds 503, 503.0, "503" and "503.0". A value is a number only
-  in JSON's syntax, so `code:007` matches the string "007", not 7.
-- **Operators only in capitals.** "not" and "or" are common in log messages;
-  only `NOT` and `OR` are operators.
-- **`status:>=500` is an error, not a search.** Other tools write ranges that
-  way; here it would silently be an exact match on the text ">=500", so the
-  error says to drop the colon.
-- **Aggregations read the index, not the events.** A histogram with no
-  query counts each bucket of a segment by two binary searches over its
-  sorted times; top values intersect the field's postings with the
-  matching rows. A number's canonical key ("503") holds every row with that
-  number, however it was written, so a value's count is one postings list,
-  not a union. (A union was there first; a planted bug showed it changed
-  nothing, and why.)
-- **A live tail matches each event in the event loop.** Fine for a few
-  clients; many clients at a high ingest rate would want that work moved
-  off the loop.
-- **The answer shows the parsed query,** with its grouping explicit, so
-  `a OR b c` meaning `a OR (b c)` is never a surprise.
-- **JavaScript, not TypeScript, for the UI:** TypeScript is not yet a
-  language I can write and explain unaided.
+| Decision | Why | Cost, or what would change it |
+|----------|-----|-------------------------------|
+| Build the storage and the index; no search engine underneath | The point is to build what Elasticsearch or Loki provide | Far fewer features than they have, and nothing tuned like them |
+| One WAL record per batch, fsynced before the 200 | A 200 means "on disk"; a crash can damage only the last record, which was never acknowledged | One fsync per request: small batches pay for it (see [Load testing](#load-testing)) |
+| A damaged record before a good one stops startup | That is acknowledged data damaged, not a crash; skipping it would lose it silently | Someone has to look before LogScope starts again |
+| Writes stop after a failed fsync | The kernel may have dropped the pages and cleared the error, so a retry could "succeed" without the data ("fsyncgate") | Ingest answers 503 until a restart |
+| Global, contiguous event ids | Recovery can prove that nothing is missing or duplicated | One counter; an id says nothing about an event's time |
+| The manifest is the commit point, replaced atomically | A crash at any step leaves the old state or the new one, never a mix | An extra fsynced file per flush or merge |
+| Hourly segments, rows sorted by (time, id) | A time range skips whole files; a search stops once nothing older can make the page | Frequent flushes make many small files, hence merging |
+| JSON lines beside a binary, memory-mapped index | The data stays readable by eye; the index opens without parsing | Two files per segment; reading an event means parsing its JSON |
+| One function, `terms_of`, for the index and the scan | They cannot disagree about what an event contains, so the tests compare only the index's machinery | A bug in `terms_of` itself is invisible to the index-versus-scan test |
+| The index narrows; inexact candidates are checked against the event | The index knows a phrase's words are in a row, not that they are consecutive | `NOT "a phrase"` checks every row in the time range |
+| Each term's rows become a full set before the newest are picked | Simple, and exact for `AND`, `OR` and `NOT` | A common value costs its whole list even for 100 results: `level:info` 3 to 4.5 ms against 0.3 ms for one request id ([measured](bench/RESULTS.md)) |
+| A range walks its field's run of the sorted term directory | No extra structure per field | Slowest over mostly distinct values (6 ms for 8,937 durations); a sorted numeric column per field would fix it |
+| Values match case-insensitively, numbers by value | `level:info` finds Gatekeeper's "INFO" and SurgiServe's "info"; `status:503` finds 503, 503.0 and "503" | Only JSON's number syntax is a number: `code:007` is the string "007", not 7 |
+| Operators only in capitals; `status:>=500` is an error | "not" and "or" are common in log messages; the other would silently be an exact match on ">=500" | A lowercase `not` is searched as a word, which can surprise; `status:>=500` at least gets an error saying what to write |
+| Aggregations read the index, not the events | A histogram with no query is two binary searches per bucket; a value's count is one postings list | With a query, they pay the same full-set cost as search, and cannot stop early |
+| Merge an hour once it has 8 segments, into one | Bounds the files a search opens | Each merge rewrites the hour so far; a size-tiered policy would write less and leave more files |
+| Delete old files only when no running search needs them | Deleting at once would make a running search silently miss merged-away events | Files linger while long searches run |
+| Retention off by default; ingest refuses events already past it | Deleting logs should be a choice; storing what the next pass deletes is pointless | The disk grows until retention is set |
+| A bounded queue per live-tail client, and `dropped` when it fills | A slow client cannot make the server buffer without limit | A slow client misses events (and is told how many) |
+| A SIGTERM ends open tails; `stop_grace_period: 15s` | uvicorn waits for open responses before shutting down, and here Compose sent SIGKILL after about a second | Tail clients reconnect after every restart |
+| Live-tail matching in the event loop | Simple, and fine for a few clients | Many clients at a high ingest rate would want it off the loop |
+| Timestamps without a time zone are rejected | Guessing UTC would misplace a local-time log by hours | Every sender must include a zone |
+| Bad lines rejected one by one; an oversized batch whole (413) | Retrying will not fix a bad line; a big batch can be split | Clients handle two kinds of error |
+| The shipper delivers at least once, checkpointing after delivery | A crash resends one batch, never skips one | Duplicates are possible: at most one batch per crash (tested) |
+| The shipper wraps lines that are not JSON objects | A startup message or a Go panic is evidence; dropping it loses it | A wrapped line has only its text to search |
+| One container: the UI built in a Node stage, served by the API at explicit routes | One thing to run; a static mount at `/` answered wrong-method API calls with the wrong status | The API also serves static files |
+| React in JavaScript, no component or chart library, fonts bundled | TypeScript is not yet a language I can write and explain unaided; a self-hosted log tool should make no outside requests | The timeline is hand-built code to maintain |
+| Benchmark: the scan as the baseline, the client inside the Compose network, a swap check per run | Compares LogScope with and without its index, with no port forwarding in the numbers, and drops runs a swapping laptop spoiled | Not a comparison with other products; on this 8 GB laptop some runs are always lost |
 
 ## Failures found while building it
 
@@ -606,3 +647,9 @@ make dev-ui    # UI on :5173, forwarding /api to :8000
     change came after seeing the failure, so the failed run is kept,
     labelled, and the whole benchmark was run again rather than its numbers
     relabelled.
+13. **The "5,000-line" batches were 3,200 lines.** The benchmark labelled
+    each ingest run by the shipper's `--batch-events` setting, but the
+    shipper also caps a batch at 1 MiB, and at 320 bytes a line that cap
+    came first. It showed only when the write-up put the number of batches
+    sent (49, not 32) beside the label. The results say so, and the runner
+    now records the lines per batch actually sent.
