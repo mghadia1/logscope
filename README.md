@@ -3,19 +3,18 @@
 A log search engine, built from the storage up. Services send JSON log
 lines over HTTP; LogScope writes them to an append-only write-ahead log,
 organizes them into time-partitioned segment files, and answers searches
-through an API and (later) a React UI. Its first real data will be the JSON
-logs of two earlier projects, SurgiServe and Gatekeeper.
+through an API and a React UI. Its first real data is the JSON logs of two
+earlier projects, SurgiServe and Gatekeeper.
 
 It deliberately does not use Elasticsearch, OpenSearch, Loki, ClickHouse or
 SQLite's full-text search: the point is to build the parts they provide.
 
-> **Status:** Milestones 0-5 of 7, and Milestone 6's tools. Events can be
-> ingested, survive crashes, and be searched with a small query language
-> through an inverted index; counted over time, by value and as numbers;
-> and followed live, from an API and a browser UI. A shipper sends real log
-> files into it, and 157,452 real log lines from Gatekeeper and SurgiServe
-> have been captured for the benchmark, which is built but **has no valid
-> results yet**: nothing about LogScope's speed is claimed here.
+> **Status:** Milestones 0-6 of 7. Events can be ingested, survive
+> crashes, and be searched with a small query language through an inverted
+> index; counted over time, by value and as numbers; and followed live,
+> from an API and a browser UI. A shipper sends real log files into it, and
+> it has been measured on 157,452 real log lines from Gatekeeper and
+> SurgiServe, on one 8 GB laptop: [Load testing](#load-testing).
 
 ## Status
 
@@ -27,7 +26,7 @@ SQLite's full-text search: the point is to build the parts they provide.
 | 3 | Query language (`level:error service:gatekeeper status>=500 "upstream timeout" NOT route:/healthz`), positioned errors; property test: index equals scan | Done |
 | 4 | Aggregations, live tail over Server-Sent Events, retention, merging small segments | Done |
 | 5 | React UI: query box, results, histogram, field sidebar, live tail | Done |
-| 6 | Real logs (SurgiServe, Gatekeeper) through a shipper; measured ingest rate and query latency, index vs scan | Shipper, real-log capture and benchmark built; no valid results yet (the host was swapping) |
+| 6 | Real logs (SurgiServe, Gatekeeper) through a shipper; measured ingest rate and query latency, index vs scan | Done (29 of 34 runs valid; [results](bench/RESULTS.md)) |
 | 7 | Architecture diagram, design decisions, failures found, benchmarks | Not started |
 
 ## Quickstart
@@ -381,9 +380,30 @@ fsync goes to Linux, then through Docker Desktop's virtual disk.
 
 ## Load testing
 
-**Status: built, no valid results.** A trial run checked the runner end to
-end, but the laptop was swapping (39 to 810 MB swapped in during its runs,
-against a 50 MB limit), so its numbers were deleted, not reported.
+Measured on 2026-10-07, on one MacBook Air M2 with 8 GB, Docker Desktop,
+the shipper and query client on the same laptop: **a laptop, not a server
+benchmark.** Full write-up, with everything it does not show:
+[bench/RESULTS.md](bench/RESULTS.md).
+
+- **Ingest:** one shipper, one batch at a time, sent the 157,452 lines at
+  12,716 to 13,571 events/s in batches of 1,000 or more (10,938/s in
+  batches of 100, one valid run), every batch fsynced before it was
+  answered. Per-event work sets the rate, not per-batch.
+- **Search, with the index vs the full scan:** 0.26 to 6.1 ms against 0.6 to
+  3.7 s, for the newest 100 matches, over the 7 searches whose runs all
+  passed the swap check; the same number of results both ways. The scan is
+  LogScope's own Milestone 1 search, not another product.
+- **What the index costs follows how common the value is:** `request_id`
+  0.26 ms, `status:504` 1.3 ms, `level:info` (99% of events) 3 to 4.5 ms,
+  and a range over 8,937 distinct durations 6 ms, although each returns at
+  most 100 events. Each term's postings become a full set before the
+  newest 100 are chosen.
+- **The UI's aggregations** (timeline, field list, top values) took 0.05 to
+  0.13 ms on the server, from the index alone.
+- **Not reported:** four searches (field and range, `NOT`, both SurgiServe
+  queries), each with a run that swapped in 51 to 645 MB, and one ingest
+  run. A first full run's query timings were all invalid and are not used
+  (failure 12). A trial before that was deleted.
 
 ### The logs
 
@@ -426,7 +446,8 @@ the same network (no Docker Desktop port forwarding in the numbers):
   measure, with the client's wall time beside it.
 - **Discipline, as in SurgiServe's and Gatekeeper's benchmarks:** two passes,
   the second in reverse order; it refuses to start while the host is
-  swapping, and marks any run with over 50 MB swapped in invalid.
+  swapping, and marks any run (one ingest, or one query's repetitions)
+  with over 50 MB swapped in invalid.
 
 ## Development
 
@@ -577,3 +598,11 @@ make dev-ui    # UI on :5173, forwarding /api to :8000
     iCloud-synced Documents folder; iCloud's sync processes took over a CPU
     core uploading them. `.gitignore` does not stop iCloud. The corpus now
     lives in `~/.cache/logscope-bench`, which is not synced.
+12. **The benchmark's swap check could never pass.** It covered a whole
+    query pass, about 3 minutes, against a 50 MB limit taken from the
+    earlier benchmarks' 15-second runs, and this laptop swaps in about
+    50 MB a minute at idle. The first full run's ingest passed and both
+    query passes failed. The check now covers one query at a time; that
+    change came after seeing the failure, so the failed run is kept,
+    labelled, and the whole benchmark was run again rather than its numbers
+    relabelled.

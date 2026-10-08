@@ -5,7 +5,8 @@
 The events are made up: shaped like Gatekeeper's access logs (Go's slog)
 and SurgiServe's job logs, spread over the last six hours, with a burst of
 upstream timeouts an hour ago so the timeline has something to show. They
-exist to try the UI; real logs arrive in Milestone 6. Standard library only.
+exist to try the UI; real logs come from `make capture` and the shipper
+(README, "Shipping logs"). Standard library only.
 """
 
 import argparse

@@ -1,0 +1,3151 @@
+{
+  "environment": {
+    "date": "2026-10-08T02:03:27+00:00",
+    "git_commit": "74c630f",
+    "machine": "Mac14,2",
+    "chip": "Apple M2",
+    "memory_gb": 8.0,
+    "macos": "26.5.2",
+    "docker_vm": {
+      "cpus": 8,
+      "memory_gb": 3.8
+    },
+    "host_swap_usage": {
+      "start": "total = 8192.00M  used = 7009.06M  free = 1182.94M  (encrypted)",
+      "end": "total = 8192.00M  used = 7436.94M  free = 755.06M  (encrypted)"
+    },
+    "busy_host_processes": {
+      "start": [],
+      "end": [
+        {
+          "cpu_percent": 116.5,
+          "command": "/System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine"
+        },
+        {
+          "cpu_percent": 25.2,
+          "command": "/System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer"
+        }
+      ]
+    }
+  },
+  "corpus": {
+    "captured": "2026-10-07T22:22:21+00:00",
+    "gatekeeper": {
+      "commit": "eb3d046",
+      "requests_sent": 150000,
+      "statuses": {
+        "200": 126488,
+        "404": 4497,
+        "405": 1428,
+        "429": 13083,
+        "502": 2947,
+        "504": 1557
+      },
+      "lines": 151836,
+      "json_objects": 151836,
+      "bytes": 48812672,
+      "sha256": "be54f4ed4f89eefe4b25bfc17e6a2407193c2d6c218036643b4d2ae32a50571a"
+    },
+    "surgiserve": {
+      "commit": "1645d27",
+      "model": "SURGISERVE_MODEL=fake: real service logs, no real inference",
+      "requests_sent": 1500,
+      "statuses": {
+        "202": 1343,
+        "404": 75,
+        "415": 82
+      },
+      "lines": 5616,
+      "json_objects": 5616,
+      "bytes": 1599904,
+      "sha256": "c8ad0a79fdc1da7fa7985bfb29749812d62f180d0de42c15defc4e977f818426"
+    },
+    "all": {
+      "lines": 157452,
+      "json_objects": 157452,
+      "bytes": 50412576,
+      "sha256": "e07d3a25a59cde3124363645e156cfe74f737334fa628ef471e56703c351fb00"
+    }
+  },
+  "settings": {
+    "reps": 5,
+    "batch_sizes": "100,1000,5000",
+    "order": "forward pass, then reverse"
+  },
+  "ingest": [
+    {
+      "pass": 1,
+      "batch": 100,
+      "read": 157452,
+      "wrapped": 0,
+      "accepted": 157452,
+      "rejected": 0,
+      "batches": 1575,
+      "retries": 0,
+      "splits": 0,
+      "seconds": 14.571,
+      "events_per_second": 10806,
+      "host_swapped_in_mb": 61.4,
+      "valid": false
+    },
+    {
+      "pass": 1,
+      "batch": 1000,
+      "read": 157452,
+      "wrapped": 0,
+      "accepted": 157452,
+      "rejected": 0,
+      "batches": 158,
+      "retries": 0,
+      "splits": 0,
+      "seconds": 12.382,
+      "events_per_second": 12716,
+      "host_swapped_in_mb": 10.6,
+      "valid": true
+    },
+    {
+      "pass": 1,
+      "batch": 5000,
+      "read": 157452,
+      "wrapped": 0,
+      "accepted": 157452,
+      "rejected": 0,
+      "batches": 49,
+      "retries": 0,
+      "splits": 0,
+      "seconds": 12.088,
+      "events_per_second": 13025,
+      "host_swapped_in_mb": 5.2,
+      "valid": true
+    },
+    {
+      "pass": 2,
+      "batch": 5000,
+      "read": 157452,
+      "wrapped": 0,
+      "accepted": 157452,
+      "rejected": 0,
+      "batches": 49,
+      "retries": 0,
+      "splits": 0,
+      "seconds": 11.602,
+      "events_per_second": 13571,
+      "host_swapped_in_mb": 4.3,
+      "valid": true
+    },
+    {
+      "pass": 2,
+      "batch": 1000,
+      "read": 157452,
+      "wrapped": 0,
+      "accepted": 157452,
+      "rejected": 0,
+      "batches": 158,
+      "retries": 0,
+      "splits": 0,
+      "seconds": 12.261,
+      "events_per_second": 12842,
+      "host_swapped_in_mb": 9.8,
+      "valid": true
+    },
+    {
+      "pass": 2,
+      "batch": 100,
+      "read": 157452,
+      "wrapped": 0,
+      "accepted": 157452,
+      "rejected": 0,
+      "batches": 1575,
+      "retries": 0,
+      "splits": 0,
+      "seconds": 14.395,
+      "events_per_second": 10938,
+      "host_swapped_in_mb": 26.8,
+      "valid": true
+    }
+  ],
+  "query_setup": {
+    "loaded": {
+      "read": 157452,
+      "wrapped": 0,
+      "accepted": 157452,
+      "rejected": 0,
+      "batches": 158,
+      "retries": 0,
+      "splits": 0,
+      "seconds": 12.549
+    },
+    "store": {
+      "next_id": 157453,
+      "flushed_through": 157452,
+      "events_in_memory": 0,
+      "segments": 3,
+      "segment_events": 157452,
+      "segment_bytes": 56330069,
+      "wal_files": 1,
+      "files_awaiting_deletion": 0,
+      "retention_hours": 0.0,
+      "writable": true,
+      "unavailable_reason": null
+    }
+  },
+  "query_summary": [
+    {
+      "name": "newest 100, no query",
+      "all_valid": true,
+      "index": {
+        "took_ms_by_pass": {
+          "1": 0.595,
+          "2": 0.563
+        },
+        "wall_ms_by_pass": {
+          "1": 2.499,
+          "2": 2.288
+        },
+        "events_read": 101,
+        "checked": 0,
+        "found": 100
+      },
+      "scan": {
+        "took_ms_by_pass": {
+          "1": 621.988,
+          "2": 614.885
+        },
+        "wall_ms_by_pass": {
+          "1": 624.099,
+          "2": 616.928
+        },
+        "events_read": 157452,
+        "checked": 157452,
+        "found": 100
+      }
+    },
+    {
+      "name": "a rare value: status:504",
+      "all_valid": true,
+      "index": {
+        "took_ms_by_pass": {
+          "1": 1.288,
+          "2": 1.52
+        },
+        "wall_ms_by_pass": {
+          "1": 3.636,
+          "2": 4.117
+        },
+        "events_read": 101,
+        "checked": 0,
+        "found": 100
+      },
+      "scan": {
+        "took_ms_by_pass": {
+          "1": 3428.187,
+          "2": 3513.749
+        },
+        "wall_ms_by_pass": {
+          "1": 3430.43,
+          "2": 3518.255
+        },
+        "events_read": 157452,
+        "checked": 157452,
+        "found": 100
+      }
+    },
+    {
+      "name": "a common value: level:info",
+      "all_valid": true,
+      "index": {
+        "took_ms_by_pass": {
+          "1": 3.008,
+          "2": 4.528
+        },
+        "wall_ms_by_pass": {
+          "1": 5.134,
+          "2": 15.642
+        },
+        "events_read": 101,
+        "checked": 0,
+        "found": 100
+      },
+      "scan": {
+        "took_ms_by_pass": {
+          "1": 3434.503,
+          "2": 3703.737
+        },
+        "wall_ms_by_pass": {
+          "1": 3436.511,
+          "2": 3712.356
+        },
+        "events_read": 157452,
+        "checked": 157452,
+        "found": 100
+      }
+    },
+    {
+      "name": "one request: request_id",
+      "all_valid": true,
+      "index": {
+        "took_ms_by_pass": {
+          "1": 0.263,
+          "2": 0.31
+        },
+        "wall_ms_by_pass": {
+          "1": 2.187,
+          "2": 1.856
+        },
+        "events_read": 1,
+        "checked": 0,
+        "found": 1
+      },
+      "scan": {
+        "took_ms_by_pass": {
+          "1": 3361.526,
+          "2": 3512.563
+        },
+        "wall_ms_by_pass": {
+          "1": 3362.865,
+          "2": 3514.06
+        },
+        "events_read": 157452,
+        "checked": 157452,
+        "found": 1
+      }
+    },
+    {
+      "name": "a boolean: rate_limited:true",
+      "all_valid": true,
+      "index": {
+        "took_ms_by_pass": {
+          "1": 1.459,
+          "2": 1.525
+        },
+        "wall_ms_by_pass": {
+          "1": 3.749,
+          "2": 4.62
+        },
+        "events_read": 101,
+        "checked": 0,
+        "found": 100
+      },
+      "scan": {
+        "took_ms_by_pass": {
+          "1": 3407.738,
+          "2": 3437.575
+        },
+        "wall_ms_by_pass": {
+          "1": 3410.806,
+          "2": 3439.98
+        },
+        "events_read": 157452,
+        "checked": 157452,
+        "found": 100
+      }
+    },
+    {
+      "name": "field and range: route + status>=500",
+      "all_valid": false,
+      "index": {
+        "took_ms_by_pass": {
+          "1": 1.642,
+          "2": 1.351
+        },
+        "wall_ms_by_pass": {
+          "1": 4.485,
+          "2": 3.648
+        },
+        "events_read": 101,
+        "checked": 0,
+        "found": 100
+      },
+      "scan": {
+        "took_ms_by_pass": {
+          "1": 3472.183,
+          "2": 3500.834
+        },
+        "wall_ms_by_pass": {
+          "1": 3474.071,
+          "2": 3504.996
+        },
+        "events_read": 157452,
+        "checked": 157452,
+        "found": 100
+      }
+    },
+    {
+      "name": "a range over durations: duration_ms>400",
+      "all_valid": true,
+      "index": {
+        "took_ms_by_pass": {
+          "1": 6.066,
+          "2": 6.014
+        },
+        "wall_ms_by_pass": {
+          "1": 13.715,
+          "2": 9.913
+        },
+        "events_read": 101,
+        "checked": 0,
+        "found": 100
+      },
+      "scan": {
+        "took_ms_by_pass": {
+          "1": 3617.831,
+          "2": 3703.809
+        },
+        "wall_ms_by_pass": {
+          "1": 3621.853,
+          "2": 3715.642
+        },
+        "events_read": 157452,
+        "checked": 157452,
+        "found": 100
+      }
+    },
+    {
+      "name": "NOT: NOT level:info",
+      "all_valid": false,
+      "index": {
+        "took_ms_by_pass": {
+          "1": 4.841,
+          "2": 12.449
+        },
+        "wall_ms_by_pass": {
+          "1": 7.787,
+          "2": 17.304
+        },
+        "events_read": 101,
+        "checked": 0,
+        "found": 100
+      },
+      "scan": {
+        "took_ms_by_pass": {
+          "1": 3483.379,
+          "2": 3682.304
+        },
+        "wall_ms_by_pass": {
+          "1": 3486.897,
+          "2": 3690.185
+        },
+        "events_read": 157452,
+        "checked": 157452,
+        "found": 100
+      }
+    },
+    {
+      "name": "SurgiServe: event:upload.rejected",
+      "all_valid": false,
+      "index": {
+        "took_ms_by_pass": {
+          "1": 0.987,
+          "2": 1.819
+        },
+        "wall_ms_by_pass": {
+          "1": 2.687,
+          "2": 9.034
+        },
+        "events_read": 82,
+        "checked": 0,
+        "found": 82
+      },
+      "scan": {
+        "took_ms_by_pass": {
+          "1": 3352.511,
+          "2": 3773.982
+        },
+        "wall_ms_by_pass": {
+          "1": 3354.788,
+          "2": 3801.125
+        },
+        "events_read": 157452,
+        "checked": 157452,
+        "found": 82
+      }
+    },
+    {
+      "name": "SurgiServe: service:worker event:job.succeeded",
+      "all_valid": false,
+      "index": {
+        "took_ms_by_pass": {
+          "1": 1.144,
+          "2": 1.78
+        },
+        "wall_ms_by_pass": {
+          "1": 4.097,
+          "2": 9.166
+        },
+        "events_read": 101,
+        "checked": 0,
+        "found": 100
+      },
+      "scan": {
+        "took_ms_by_pass": {
+          "1": 3556.911,
+          "2": 3906.746
+        },
+        "wall_ms_by_pass": {
+          "1": 3559.18,
+          "2": 3917.863
+        },
+        "events_read": 157452,
+        "checked": 157452,
+        "found": 100
+      }
+    },
+    {
+      "name": "a phrase: \"connection refused\"",
+      "all_valid": true,
+      "index": {
+        "took_ms_by_pass": {
+          "1": 2.808,
+          "2": 2.848
+        },
+        "wall_ms_by_pass": {
+          "1": 5.89,
+          "2": 5.471
+        },
+        "events_read": 101,
+        "checked": 101,
+        "found": 100
+      },
+      "scan": {
+        "took_ms_by_pass": {
+          "1": 2772.188,
+          "2": 2766.16
+        },
+        "wall_ms_by_pass": {
+          "1": 2783.526,
+          "2": 2768.973
+        },
+        "events_read": 157452,
+        "checked": 157452,
+        "found": 100
+      }
+    },
+    {
+      "name": "UI timeline: histogram, no query",
+      "all_valid": true,
+      "index": {
+        "took_ms_by_pass": {
+          "1": 0.056,
+          "2": 0.052
+        },
+        "wall_ms_by_pass": {
+          "1": 1.083,
+          "2": 0.936
+        },
+        "events_read": 0,
+        "checked": 0,
+        "found": 157452
+      }
+    },
+    {
+      "name": "UI fields: field list",
+      "all_valid": true,
+      "index": {
+        "took_ms_by_pass": {
+          "1": 0.131,
+          "2": 0.122
+        },
+        "wall_ms_by_pass": {
+          "1": 0.986,
+          "2": 0.915
+        },
+        "events_read": 0,
+        "checked": 0,
+        "found": 157452
+      }
+    },
+    {
+      "name": "UI top values: route",
+      "all_valid": true,
+      "index": {
+        "took_ms_by_pass": {
+          "1": 0.101,
+          "2": 0.097
+        },
+        "wall_ms_by_pass": {
+          "1": 0.87,
+          "2": 0.947
+        },
+        "events_read": 0,
+        "checked": 0,
+        "found": 157452
+      }
+    }
+  ],
+  "queries": [
+    {
+      "pass": 1,
+      "name": "newest 100, no query",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 16.16,
+            "took_ms": 1.11,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2.446,
+            "took_ms": 0.567,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2.013,
+            "took_ms": 0.543,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2.703,
+            "took_ms": 0.657,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2.499,
+            "took_ms": 0.595,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 622.822,
+            "took_ms": 620.273,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 599.115,
+            "took_ms": 597.413,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 651.381,
+            "took_ms": 649.44,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 624.099,
+            "took_ms": 621.988,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 632.789,
+            "took_ms": 630.256,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 15.4,
+      "valid": true
+    },
+    {
+      "pass": 1,
+      "name": "a rare value: status:504",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 15.043,
+            "took_ms": 1.821,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4.572,
+            "took_ms": 1.288,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3.21,
+            "took_ms": 1.282,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3.636,
+            "took_ms": 1.338,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3.269,
+            "took_ms": 1.233,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 3482.982,
+            "took_ms": 3468.627,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3430.43,
+            "took_ms": 3428.187,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3411.285,
+            "took_ms": 3408.845,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3411.039,
+            "took_ms": 3408.695,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3434.005,
+            "took_ms": 3431.721,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 2.5,
+      "valid": true
+    },
+    {
+      "pass": 1,
+      "name": "a common value: level:info",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 21.265,
+            "took_ms": 3.43,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 5.134,
+            "took_ms": 3.008,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4.684,
+            "took_ms": 2.609,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 6.113,
+            "took_ms": 3.179,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4.008,
+            "took_ms": 2.364,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 3462.287,
+            "took_ms": 3459.902,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3435.444,
+            "took_ms": 3433.038,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3492.472,
+            "took_ms": 3488.256,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3418.701,
+            "took_ms": 3416.959,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3436.511,
+            "took_ms": 3434.503,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 4.7,
+      "valid": true
+    },
+    {
+      "pass": 1,
+      "name": "one request: request_id",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 13.604,
+            "took_ms": 1.119,
+            "events_read": 1,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          },
+          {
+            "wall_ms": 5.005,
+            "took_ms": 0.654,
+            "events_read": 1,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          },
+          {
+            "wall_ms": 2.187,
+            "took_ms": 0.263,
+            "events_read": 1,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          },
+          {
+            "wall_ms": 1.361,
+            "took_ms": 0.145,
+            "events_read": 1,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          },
+          {
+            "wall_ms": 1.93,
+            "took_ms": 0.176,
+            "events_read": 1,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 3505.193,
+            "took_ms": 3493.453,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          },
+          {
+            "wall_ms": 3394.035,
+            "took_ms": 3391.581,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          },
+          {
+            "wall_ms": 3362.841,
+            "took_ms": 3361.526,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          },
+          {
+            "wall_ms": 3362.865,
+            "took_ms": 3359.249,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          },
+          {
+            "wall_ms": 3357.223,
+            "took_ms": 3355.679,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          }
+        ]
+      },
+      "host_swapped_in_mb": 6.7,
+      "valid": true
+    },
+    {
+      "pass": 1,
+      "name": "a boolean: rate_limited:true",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 21.083,
+            "took_ms": 3.241,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3.717,
+            "took_ms": 1.439,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3.749,
+            "took_ms": 1.458,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3.922,
+            "took_ms": 1.562,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3.427,
+            "took_ms": 1.459,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 3410.806,
+            "took_ms": 3407.738,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3421.295,
+            "took_ms": 3418.69,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3368.805,
+            "took_ms": 3366.526,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3388.032,
+            "took_ms": 3385.964,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3426.68,
+            "took_ms": 3424.566,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 0.6,
+      "valid": true
+    },
+    {
+      "pass": 1,
+      "name": "field and range: route + status>=500",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 17.168,
+            "took_ms": 2.363,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4.801,
+            "took_ms": 1.642,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4.106,
+            "took_ms": 1.854,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4.055,
+            "took_ms": 1.426,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4.485,
+            "took_ms": 1.532,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 3456.774,
+            "took_ms": 3453.681,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3536.315,
+            "took_ms": 3533.267,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3478.529,
+            "took_ms": 3474.451,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3449.402,
+            "took_ms": 3446.603,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3474.071,
+            "took_ms": 3472.183,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 0.8,
+      "valid": true
+    },
+    {
+      "pass": 1,
+      "name": "a range over durations: duration_ms>400",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 22.014,
+            "took_ms": 7.644,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 8.374,
+            "took_ms": 5.896,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 19.163,
+            "took_ms": 6.066,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 9.385,
+            "took_ms": 5.987,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 13.715,
+            "took_ms": 6.617,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 3595.802,
+            "took_ms": 3591.58,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3621.853,
+            "took_ms": 3617.831,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3726.781,
+            "took_ms": 3716.375,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3599.92,
+            "took_ms": 3595.921,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3632.616,
+            "took_ms": 3630.034,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 8.3,
+      "valid": true
+    },
+    {
+      "pass": 1,
+      "name": "NOT: NOT level:info",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 24.224,
+            "took_ms": 8.914,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 7.787,
+            "took_ms": 4.841,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 6.666,
+            "took_ms": 4.794,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 6.008,
+            "took_ms": 3.79,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 10.15,
+            "took_ms": 6.44,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 3486.897,
+            "took_ms": 3483.379,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3478.008,
+            "took_ms": 3475.701,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3436.324,
+            "took_ms": 3433.256,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3537.752,
+            "took_ms": 3534.082,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3505.569,
+            "took_ms": 3501.947,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 6.7,
+      "valid": true
+    },
+    {
+      "pass": 1,
+      "name": "SurgiServe: event:upload.rejected",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 14.591,
+            "took_ms": 1.666,
+            "events_read": 82,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          },
+          {
+            "wall_ms": 3.229,
+            "took_ms": 1.121,
+            "events_read": 82,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          },
+          {
+            "wall_ms": 2.687,
+            "took_ms": 0.926,
+            "events_read": 82,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          },
+          {
+            "wall_ms": 2.635,
+            "took_ms": 0.987,
+            "events_read": 82,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          },
+          {
+            "wall_ms": 2.517,
+            "took_ms": 0.968,
+            "events_read": 82,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 3354.788,
+            "took_ms": 3352.511,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          },
+          {
+            "wall_ms": 3402.618,
+            "took_ms": 3400.81,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          },
+          {
+            "wall_ms": 3348.073,
+            "took_ms": 3346.215,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          },
+          {
+            "wall_ms": 3343.949,
+            "took_ms": 3342.255,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          },
+          {
+            "wall_ms": 3393.013,
+            "took_ms": 3390.097,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          }
+        ]
+      },
+      "host_swapped_in_mb": 1.5,
+      "valid": true
+    },
+    {
+      "pass": 1,
+      "name": "SurgiServe: service:worker event:job.succeeded",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 15.1,
+            "took_ms": 1.484,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2.938,
+            "took_ms": 0.967,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4.636,
+            "took_ms": 1.422,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4.097,
+            "took_ms": 1.144,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2.84,
+            "took_ms": 0.966,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 3513.059,
+            "took_ms": 3510.57,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3612.685,
+            "took_ms": 3608.206,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3516.352,
+            "took_ms": 3511.39,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3559.18,
+            "took_ms": 3556.911,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3613.888,
+            "took_ms": 3610.341,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 4.3,
+      "valid": true
+    },
+    {
+      "pass": 1,
+      "name": "a phrase: \"connection refused\"",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 17.655,
+            "took_ms": 3.312,
+            "events_read": 101,
+            "checked": 101,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4.554,
+            "took_ms": 2.736,
+            "events_read": 101,
+            "checked": 101,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 6.167,
+            "took_ms": 2.808,
+            "events_read": 101,
+            "checked": 101,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 5.89,
+            "took_ms": 3.265,
+            "events_read": 101,
+            "checked": 101,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4.664,
+            "took_ms": 2.759,
+            "events_read": 101,
+            "checked": 101,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 2774.113,
+            "took_ms": 2772.188,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2800.751,
+            "took_ms": 2790.028,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2786.019,
+            "took_ms": 2782.031,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2696.185,
+            "took_ms": 2693.951,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2783.526,
+            "took_ms": 2771.997,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 6.2,
+      "valid": true
+    },
+    {
+      "pass": 1,
+      "name": "UI timeline: histogram, no query",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 16.661,
+            "took_ms": 1.079,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 1.089,
+            "took_ms": 0.06,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 1.083,
+            "took_ms": 0.056,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.964,
+            "took_ms": 0.052,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.972,
+            "took_ms": 0.049,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          }
+        ]
+      },
+      "host_swapped_in_mb": 0.4,
+      "valid": true
+    },
+    {
+      "pass": 1,
+      "name": "UI fields: field list",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 22.379,
+            "took_ms": 4.801,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 1.315,
+            "took_ms": 0.184,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.986,
+            "took_ms": 0.131,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.851,
+            "took_ms": 0.12,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.818,
+            "took_ms": 0.116,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          }
+        ]
+      },
+      "host_swapped_in_mb": 3.0,
+      "valid": true
+    },
+    {
+      "pass": 1,
+      "name": "UI top values: route",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 16.359,
+            "took_ms": 1.203,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 1.049,
+            "took_ms": 0.105,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.835,
+            "took_ms": 0.091,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.87,
+            "took_ms": 0.101,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.804,
+            "took_ms": 0.092,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          }
+        ]
+      },
+      "host_swapped_in_mb": 6.1,
+      "valid": true
+    },
+    {
+      "pass": 2,
+      "name": "UI top values: route",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 11.597,
+            "took_ms": 0.173,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.971,
+            "took_ms": 0.097,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.947,
+            "took_ms": 0.096,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.901,
+            "took_ms": 0.105,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.851,
+            "took_ms": 0.086,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          }
+        ]
+      },
+      "host_swapped_in_mb": 2.5,
+      "valid": true
+    },
+    {
+      "pass": 2,
+      "name": "UI fields: field list",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 14.689,
+            "took_ms": 1.27,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 1.011,
+            "took_ms": 0.13,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.91,
+            "took_ms": 0.122,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.915,
+            "took_ms": 0.119,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.852,
+            "took_ms": 0.121,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          }
+        ]
+      },
+      "host_swapped_in_mb": 17.1,
+      "valid": true
+    },
+    {
+      "pass": 2,
+      "name": "UI timeline: histogram, no query",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 11.966,
+            "took_ms": 0.168,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 1.099,
+            "took_ms": 0.053,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.932,
+            "took_ms": 0.05,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.936,
+            "took_ms": 0.052,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          },
+          {
+            "wall_ms": 0.874,
+            "took_ms": 0.05,
+            "events_read": 0,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 157452
+          }
+        ]
+      },
+      "host_swapped_in_mb": 11.4,
+      "valid": true
+    },
+    {
+      "pass": 2,
+      "name": "a phrase: \"connection refused\"",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 16.982,
+            "took_ms": 3.984,
+            "events_read": 101,
+            "checked": 101,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 9.875,
+            "took_ms": 2.848,
+            "events_read": 101,
+            "checked": 101,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 5.471,
+            "took_ms": 3.537,
+            "events_read": 101,
+            "checked": 101,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4.541,
+            "took_ms": 2.727,
+            "events_read": 101,
+            "checked": 101,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4.369,
+            "took_ms": 2.644,
+            "events_read": 101,
+            "checked": 101,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 2881.799,
+            "took_ms": 2877.308,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2768.973,
+            "took_ms": 2766.984,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2745.851,
+            "took_ms": 2743.732,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2735.669,
+            "took_ms": 2733.684,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2769.643,
+            "took_ms": 2766.16,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 13.7,
+      "valid": true
+    },
+    {
+      "pass": 2,
+      "name": "SurgiServe: service:worker event:job.succeeded",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 15.131,
+            "took_ms": 1.312,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 8.102,
+            "took_ms": 1.78,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 8.697,
+            "took_ms": 1.393,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 20.806,
+            "took_ms": 5.365,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 9.166,
+            "took_ms": 2.367,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 3854.442,
+            "took_ms": 3837.124,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4836.093,
+            "took_ms": 4831.106,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4267.76,
+            "took_ms": 4246.65,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3917.863,
+            "took_ms": 3906.746,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3906.489,
+            "took_ms": 3885.205,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 644.6,
+      "valid": false
+    },
+    {
+      "pass": 2,
+      "name": "SurgiServe: event:upload.rejected",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 28.877,
+            "took_ms": 4.719,
+            "events_read": 82,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          },
+          {
+            "wall_ms": 7.421,
+            "took_ms": 1.739,
+            "events_read": 82,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          },
+          {
+            "wall_ms": 14.095,
+            "took_ms": 1.873,
+            "events_read": 82,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          },
+          {
+            "wall_ms": 9.034,
+            "took_ms": 1.669,
+            "events_read": 82,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          },
+          {
+            "wall_ms": 7.029,
+            "took_ms": 1.819,
+            "events_read": 82,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 4318.777,
+            "took_ms": 4307.58,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          },
+          {
+            "wall_ms": 3801.125,
+            "took_ms": 3768.688,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          },
+          {
+            "wall_ms": 4306.307,
+            "took_ms": 4293.722,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          },
+          {
+            "wall_ms": 3703.013,
+            "took_ms": 3693.872,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          },
+          {
+            "wall_ms": 3793.712,
+            "took_ms": 3773.982,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 82
+          }
+        ]
+      },
+      "host_swapped_in_mb": 344.5,
+      "valid": false
+    },
+    {
+      "pass": 2,
+      "name": "NOT: NOT level:info",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 30.208,
+            "took_ms": 12.449,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 14.547,
+            "took_ms": 10.189,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 10.029,
+            "took_ms": 6.313,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 22.532,
+            "took_ms": 13.378,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 17.304,
+            "took_ms": 12.725,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 3690.185,
+            "took_ms": 3677.996,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3687.343,
+            "took_ms": 3682.304,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3944.978,
+            "took_ms": 3930.359,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3605.303,
+            "took_ms": 3598.618,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3721.025,
+            "took_ms": 3696.438,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 51.2,
+      "valid": false
+    },
+    {
+      "pass": 2,
+      "name": "a range over durations: duration_ms>400",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 29.344,
+            "took_ms": 8.577,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 10.592,
+            "took_ms": 5.934,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 8.756,
+            "took_ms": 6.235,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 9.913,
+            "took_ms": 6.014,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 8.484,
+            "took_ms": 5.97,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 3680.029,
+            "took_ms": 3666.234,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3750.185,
+            "took_ms": 3747.886,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3715.642,
+            "took_ms": 3703.809,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3607.174,
+            "took_ms": 3604.885,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3736.306,
+            "took_ms": 3730.857,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 17.0,
+      "valid": true
+    },
+    {
+      "pass": 2,
+      "name": "field and range: route + status>=500",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 20.628,
+            "took_ms": 2.946,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3.32,
+            "took_ms": 1.315,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 13.325,
+            "took_ms": 1.762,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3.648,
+            "took_ms": 1.348,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3.632,
+            "took_ms": 1.351,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 3517.536,
+            "took_ms": 3515.044,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3751.422,
+            "took_ms": 3739.232,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3487.491,
+            "took_ms": 3484.847,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3475.547,
+            "took_ms": 3472.893,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3504.996,
+            "took_ms": 3500.834,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 68.0,
+      "valid": false
+    },
+    {
+      "pass": 2,
+      "name": "a boolean: rate_limited:true",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 14.85,
+            "took_ms": 1.954,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 11.57,
+            "took_ms": 1.803,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3.376,
+            "took_ms": 1.412,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3.157,
+            "took_ms": 1.381,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4.62,
+            "took_ms": 1.525,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 3591.681,
+            "took_ms": 3575.887,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3439.98,
+            "took_ms": 3437.575,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3453.77,
+            "took_ms": 3451.858,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3415.204,
+            "took_ms": 3410.612,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3412.764,
+            "took_ms": 3410.483,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 15.8,
+      "valid": true
+    },
+    {
+      "pass": 2,
+      "name": "one request: request_id",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 15.4,
+            "took_ms": 2.297,
+            "events_read": 1,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          },
+          {
+            "wall_ms": 2.265,
+            "took_ms": 0.252,
+            "events_read": 1,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          },
+          {
+            "wall_ms": 1.856,
+            "took_ms": 0.31,
+            "events_read": 1,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          },
+          {
+            "wall_ms": 1.581,
+            "took_ms": 0.359,
+            "events_read": 1,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          },
+          {
+            "wall_ms": 1.396,
+            "took_ms": 0.157,
+            "events_read": 1,
+            "checked": 0,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 3585.439,
+            "took_ms": 3583.101,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          },
+          {
+            "wall_ms": 3513.762,
+            "took_ms": 3512.222,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          },
+          {
+            "wall_ms": 3514.06,
+            "took_ms": 3512.563,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          },
+          {
+            "wall_ms": 3510.429,
+            "took_ms": 3509.038,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          },
+          {
+            "wall_ms": 3517.6,
+            "took_ms": 3513.18,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 1
+          }
+        ]
+      },
+      "host_swapped_in_mb": 12.9,
+      "valid": true
+    },
+    {
+      "pass": 2,
+      "name": "a common value: level:info",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 19.073,
+            "took_ms": 4.838,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4.909,
+            "took_ms": 3.009,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 15.642,
+            "took_ms": 4.528,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 18.67,
+            "took_ms": 4.985,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 8.58,
+            "took_ms": 4.374,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 3448.047,
+            "took_ms": 3445.554,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3712.356,
+            "took_ms": 3703.737,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3918.244,
+            "took_ms": 3909.596,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3617.914,
+            "took_ms": 3612.198,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3730.581,
+            "took_ms": 3727.727,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 25.2,
+      "valid": true
+    },
+    {
+      "pass": 2,
+      "name": "a rare value: status:504",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 17.751,
+            "took_ms": 1.832,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3.263,
+            "took_ms": 1.251,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3.376,
+            "took_ms": 1.331,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 11.441,
+            "took_ms": 1.584,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 4.117,
+            "took_ms": 1.52,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 3461.368,
+            "took_ms": 3458.691,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3493.343,
+            "took_ms": 3491.012,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3553.344,
+            "took_ms": 3546.479,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3704.406,
+            "took_ms": 3701.583,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 3518.255,
+            "took_ms": 3513.749,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 23.1,
+      "valid": true
+    },
+    {
+      "pass": 2,
+      "name": "newest 100, no query",
+      "runs": {
+        "index": [
+          {
+            "wall_ms": 19.556,
+            "took_ms": 0.862,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2.288,
+            "took_ms": 0.563,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2.231,
+            "took_ms": 0.526,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2.191,
+            "took_ms": 0.561,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 2.759,
+            "took_ms": 0.571,
+            "events_read": 101,
+            "checked": 0,
+            "segments_read": 1,
+            "segments_total": 3,
+            "found": 100
+          }
+        ],
+        "scan": [
+          {
+            "wall_ms": 616.928,
+            "took_ms": 614.885,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 612.144,
+            "took_ms": 610.183,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 611.048,
+            "took_ms": 609.267,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 635.03,
+            "took_ms": 633.346,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          },
+          {
+            "wall_ms": 617.679,
+            "took_ms": 615.875,
+            "events_read": 157452,
+            "checked": 157452,
+            "segments_read": 3,
+            "segments_total": 3,
+            "found": 100
+          }
+        ]
+      },
+      "host_swapped_in_mb": 2.6,
+      "valid": true
+    }
+  ]
+}
