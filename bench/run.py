@@ -24,7 +24,9 @@ Method, from the SurgiServe and Gatekeeper benchmarks: two passes, the
 second in reverse order, so a machine that drifts as it warms affects every
 configuration alike; refuses to start while the host is swapping; records
 the host's swap-ins during every run and marks one with more than 50 MB of
-them invalid.
+them invalid. A run is one ingest, or one query's repetitions in one pass
+(until 2026-10-08 it was a whole query pass, about 3 minutes: see
+results/20261008T014120Z/NOTE.md).
 
 Writes bench/results/<timestamp>/results.json and results.md.
 """
@@ -245,18 +247,24 @@ def query_runs(reps: int) -> tuple[list[dict[str, object]], dict[str, object]]:
     queries = corpus_queries()
     runs = []
     for run_pass, order in ((1, queries), (2, list(reversed(queries)))):
-        plan = {"base": "http://logscope:8000", "reps": reps, "queries": order}
-        _, before = host_swap_mb()
-        results = json.loads(
-            in_network("python", "/bench/client.py", json.dumps(plan))
-            .strip()
-            .splitlines()[-1]
-        )
-        _, after = host_swap_mb()
-        swapped = after - before
-        for result in results:
-            runs.append(measured({"pass": run_pass, **result}, swapped))
-        print(f"  queries pass {run_pass}: done, swap-in {swapped:.1f} MB", flush=True)
+        # One client per query, so the swap check covers one query's
+        # repetitions (about 18 s with the scan), not a 3-minute pass.
+        for query in order:
+            plan = {"base": "http://logscope:8000", "reps": reps, "queries": [query]}
+            _, before = host_swap_mb()
+            (result,) = json.loads(
+                in_network("python", "/bench/client.py", json.dumps(plan))
+                .strip()
+                .splitlines()[-1]
+            )
+            _, after = host_swap_mb()
+            run = measured({"pass": run_pass, **result}, after - before)
+            runs.append(run)
+            print(
+                f"  queries pass {run_pass}: {query['name']}:"
+                f" swap-in {run['host_swapped_in_mb']} MB",
+                flush=True,
+            )
     return runs, {"loaded": loaded, "store": store}
 
 
